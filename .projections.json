@@ -3,17 +3,21 @@
         "dispatch": "ninja -C build && build/bin/figtree-test"
     },
     "include/figtree/*.hpp": {
-        "alternate": ["src/{}.cpp"],
-        "type": "header",
-        "template": ["#pragma once"]
+        "alternate": "src/{}.cpp",
+        "type": "include",
+        "template": ["#pragma once", "", "", "namespace figtree", "{", "", "", "}"]
     },
     "src/*.hpp": {
-        "alternate": ["src/{}.cpp"],
+        "alternate": "src/{}.cpp",
         "type": "header",
         "template": ["#pragma once"]
     },
     "src/*.cpp": {
         "alternate": ["include/figtree/{}.hpp", "src/{}.hpp"],
         "type": "source"
+    },
+    "test/*_test.cpp": {
+        "alternate": ["src/{}.cpp", "src/{}.hpp", "include/figtree/{}.hpp"],
+        "type": "test"
     }
 }
