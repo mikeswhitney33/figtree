@@ -1,4 +1,5 @@
 set(src
+    constant_series_test.cpp
     nchoosek_test.cpp
     )
 
