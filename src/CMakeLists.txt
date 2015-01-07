@@ -1,4 +1,5 @@
 set(src
+    center_monomials.cpp
     constant_series.cpp
     )
 

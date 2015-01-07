@@ -1,9 +1,11 @@
 set(src
+    center_monomials_test.cpp
     constant_series_test.cpp
     nchoosek_test.cpp
     )
 
 set(deps
+    ${FIGTREE_LIB_TARGET}
     gtest_main
     )
 
