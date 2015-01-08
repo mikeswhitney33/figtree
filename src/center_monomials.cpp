@@ -7,7 +7,7 @@ namespace figtree
 {
 
 
-std::vector<double> compute_source_center_monomials(int d, int p_max, double h,
+std::vector<double> compute_center_monomials(int d, int p_max, double h,
         const std::vector<double>& dx)
 {
     std::vector<int> heads(d, 0);

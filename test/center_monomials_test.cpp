@@ -6,11 +6,11 @@ namespace figtree
 {
 
 
-class ComputeSourceCenterMonomials : public ::testing::Test
+class ComputeCenterMonomials : public ::testing::Test
 {
 public:
 
-    ComputeSourceCenterMonomials()
+    ComputeCenterMonomials()
         : h(0.8)
         , dx{0.2, 0.6}
     {}
@@ -21,17 +21,17 @@ public:
 };
 
 
-TEST_F(ComputeSourceCenterMonomials, One)
+TEST_F(ComputeCenterMonomials, One)
 {
-    std::vector<double> output = compute_source_center_monomials(1, 1, h, dx);
+    std::vector<double> output = compute_center_monomials(1, 1, h, dx);
     EXPECT_EQ(1, output.size());
     EXPECT_DOUBLE_EQ(1.0, output.at(0));
 }
 
 
-TEST_F(ComputeSourceCenterMonomials, Six)
+TEST_F(ComputeCenterMonomials, Six)
 {
-    std::vector<double> output = compute_source_center_monomials(2, 3, h, dx);
+    std::vector<double> output = compute_center_monomials(2, 3, h, dx);
     EXPECT_EQ(6, output.size());
     EXPECT_DOUBLE_EQ(1.0, output.at(0));
     EXPECT_DOUBLE_EQ(0.25, output.at(1));
