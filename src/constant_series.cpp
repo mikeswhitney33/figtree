@@ -1,5 +1,7 @@
 #include "constant_series.hpp"
 
+#include <limits>
+
 #include "p_max_total.hpp"
 
 
