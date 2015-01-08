@@ -4,7 +4,7 @@ set(src
     error_bound_test.cpp
     nchoosek_test.cpp
     radius_bounds_test.cpp
-    truncation_ranges_test.cpp
+    truncation_test.cpp
     )
 
 set(deps

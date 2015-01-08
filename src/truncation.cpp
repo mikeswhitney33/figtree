@@ -1,4 +1,4 @@
-#include "truncation_ranges.hpp"
+#include "truncation.hpp"
 
 #include <cmath>
 

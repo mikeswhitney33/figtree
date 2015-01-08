@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "truncation_ranges.hpp"
+#include "truncation.hpp"
 
 
 namespace figtree
@@ -37,6 +37,14 @@ TEST(TargetTruncationRanges, General)
     EXPECT_DOUBLE_EQ(0.06750684345806203, ranges.max.at(3));
     EXPECT_DOUBLE_EQ(0.11340819511655957, ranges.max.at(4));
     EXPECT_DOUBLE_EQ(0.0, ranges.max.at(5));
+}
+
+
+TEST(SourceTruncationNumber, General)
+{
+    int p_max = 6;
+    std::vector<double> ranges = source_truncation_ranges(10, 2, 0.8, 0.01, p_max);
+    EXPECT_EQ(6, source_truncation_number(2, p_max, ranges));
 }
 
 
