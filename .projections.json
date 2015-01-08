@@ -14,11 +14,12 @@
     },
     "src/*.cpp": {
         "alternate": ["include/figtree/{}.hpp", "src/{}.hpp"],
-        "type": "source"
+        "type": "source",
+        "template": ["#include \"{}.hpp\"", "", "", "namespace figtree", "{", "", "", "}"]
     },
     "test/*_test.cpp": {
         "alternate": ["src/{}.cpp", "src/{}.hpp", "include/figtree/{}.hpp"],
         "type": "test",
-        "template": ["#include <gtest/gtest.h>"]
+        "template": ["#include <gtest/gtest.h>", "#include \"{}.hpp\"", "", "", "namespace figtree", "{", "", "", "}"]
     }
 }
