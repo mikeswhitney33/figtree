@@ -1,5 +1,6 @@
 #include "truncation.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 #include "radius_bounds.hpp"
