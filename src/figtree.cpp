@@ -489,7 +489,7 @@ void computeSourceCenterMonomials( int d, double h, double * dx,
     dx[i]=dx[i]/h;
     heads[i] = 0;
   }
-    
+
   sourceCenterMonomials[0] = 1.0;
   for (int k = 1, t = 1, tail = 1; k < p; k++, tail = t)
   {
