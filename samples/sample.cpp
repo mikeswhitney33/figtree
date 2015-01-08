@@ -28,6 +28,21 @@ void figtreeFindRadiusBounds( double a_lo, double a_hi, double b_max,
                               int max_it, double * lo_out, double * hi_out );
 void figtreeSourceTruncationRanges( double r, double rx, double h, double epsilon, int pMax, double * max_source_dists2 );
 void figtreeTargetTruncationRanges( double r, double rx, double h, double epsilon, int pMax, double * max_source_dists2, double * min_target_dists2 );
+inline
+int figtreeSourceTruncationNumber( double dx2, int pMax, double * max_source_dists2 )
+{
+  return (int)(std::lower_bound( max_source_dists2, max_source_dists2 + pMax - 1, dx2) - max_source_dists2) + 1;  
+}
+inline
+int figtreeTargetTruncationNumber( double dy2, int pMax, double * max_target_dists2, double * min_target_dists2 )
+{
+  if( dy2 <= max_target_dists2[pMax-2] )
+    return (int)(std::lower_bound( max_target_dists2, max_target_dists2 + pMax - 1, dy2) - max_target_dists2) + 1;
+  else if( dy2 >= min_target_dists2[pMax-2] )
+    return (int)(std::lower_bound( min_target_dists2, min_target_dists2 + pMax - 1, dy2, std::greater<double>() ) - min_target_dists2) + 1;
+  else 
+    return pMax;
+}
 
 
 
@@ -147,6 +162,12 @@ int main()
         }
     }
     std::cout << std::endl;
+
+    std::cout << "### Source Truncation Number" << std::endl;
+    std::cout << figtreeSourceTruncationNumber(2, 6, ranges1) << std::endl;
+
+    std::cout << "### Target Truncation Number" << std::endl;
+    std::cout << figtreeTargetTruncationNumber(2, 6, ranges2, ranges3) << std::endl;
 
     return 0;
 }
