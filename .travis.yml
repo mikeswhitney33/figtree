@@ -1,0 +1,17 @@
+language: cpp
+
+compiler:
+    - clang
+    - gcc
+
+install:
+    - scripts/install_compilers.sh
+    - scripts/install_flann.sh
+
+before_script:
+    - if [[ $CXX == "g++" ]]; then
+      export CXX="g++-4.8";
+      fi
+
+script:
+    - scripts/build_and_test.sh
