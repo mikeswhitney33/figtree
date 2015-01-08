@@ -48,4 +48,11 @@ TEST(SourceTruncationNumber, General)
 }
 
 
+TEST(TargetTruncationNumber, General)
+{
+    int p_max = 6;
+    TruncationRanges ranges = target_truncation_ranges(10, 2, 0.8, 0.01, p_max);
+    EXPECT_EQ(6, target_truncation_number(2, p_max, ranges));
+}
+
 }
