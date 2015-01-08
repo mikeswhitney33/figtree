@@ -3,6 +3,7 @@ set(src
     constant_series_test.cpp
     error_bound_test.cpp
     nchoosek_test.cpp
+    radius_bounds_test.cpp
     )
 
 set(deps
