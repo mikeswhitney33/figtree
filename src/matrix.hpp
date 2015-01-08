@@ -14,6 +14,7 @@ public:
     Matrix(double * data, int n_rows, int n_cols);
 
     std::vector<double> get_mins() const;
+    std::vector<double> get_maxs() const;
 
 private:
 
