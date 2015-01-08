@@ -1,6 +1,7 @@
 set(src
     center_monomials_test.cpp
     constant_series_test.cpp
+    error_bound_test.cpp
     nchoosek_test.cpp
     )
 
