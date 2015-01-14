@@ -1,5 +1,6 @@
 #include "matrix.hpp"
 
+#include <assert.h>
 #include <limits>
 
 
@@ -42,6 +43,24 @@ std::vector<double> Matrix::get_maxs() const
         }
     }
     return maxs;
+}
+
+
+double get_max_range(const Matrix& X, const Matrix& Y)
+{
+    std::vector<double> minX = X.get_mins();
+    std::vector<double> minY = Y.get_mins();
+    std::vector<double> maxX = X.get_maxs();
+    std::vector<double> maxY = Y.get_maxs();
+    assert(minX.size() == minY.size());
+    double max_range = 0;
+    for (int i = 0; i < minX.size(); ++i)
+    {
+        max_range = std::max(
+                std::max(maxX[i], maxY[i]) - std::min(minX[i], minY[i]),
+                max_range);
+    }
+    return max_range;
 }
 
 

@@ -40,4 +40,11 @@ TEST_F(MatrixTest, GetMaxs)
 }
 
 
+TEST_F(MatrixTest, GetMaxRange)
+{
+    double actual = get_max_range(X, Y);
+    EXPECT_DOUBLE_EQ(0.9853, actual);
+}
+
+
 }

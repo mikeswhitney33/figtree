@@ -26,4 +26,7 @@ private:
 };
 
 
+double get_max_range(const Matrix& X, const Matrix& Y);
+
+
 }
