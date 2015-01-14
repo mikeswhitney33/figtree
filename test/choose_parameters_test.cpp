@@ -19,6 +19,7 @@ TEST_F(ChooseParametersTest, Uniform)
     EXPECT_EQ(17, params.k_max);
     EXPECT_EQ(11, params.p_max);
     EXPECT_DOUBLE_EQ(1.7167728210314779, params.r);
+    EXPECT_DOUBLE_EQ(0.0097934361252327851, params.error_bound);
 }
 
 
