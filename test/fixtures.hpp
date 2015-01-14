@@ -50,6 +50,8 @@ public:
         , X(x, N, d)
         , Y(y, M, d)
         , Q(q, W, N)
+        , epsilon(1e-2)
+        , h(0.8)
     {}
     
     int d;
@@ -62,6 +64,8 @@ public:
     Matrix X;
     Matrix Y;
     Matrix Q;
+    double epsilon;
+    double h;
 
 };
 
