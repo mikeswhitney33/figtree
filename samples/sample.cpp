@@ -270,6 +270,7 @@ int main()
     int kMax;
     double * mins = new double[d];
     double * maxs = new double[d];
+    double error_bound;
 
     figtreeCalcMinMax(d, N, x, mins, maxs, 0);
     std::cout << "### Figtree calc min max no update" << std::endl << "Mins: ";
@@ -289,10 +290,51 @@ int main()
     std::cout << std::endl << "Max range: " << maxRange << std::endl;
 
     std::cout << std::endl << "### Choose parameters uniform" << std::endl;
-    figtreeChooseParametersUniform(d, h, epsilon, kLimit, maxRange, &kMax, &data.pMax, &data.r, NULL);
+    figtreeChooseParametersUniform(d, h, epsilon, kLimit, maxRange, &kMax, &data.pMax, &data.r, &error_bound);
     std::cout << "kMax: " << kMax << std::endl
               << "pMax: " << data.pMax << std::endl
-              << "r: " << data.r << std::endl;
+              << "r: " << data.r << std::endl
+              << "error_bound: " << error_bound << std::endl;
+
+    std::cout << std::endl << "### Choose parameters non-uniform" << std::endl;
+    figtreeChooseParametersNonUniform(d, N, x, h, epsilon, kLimit, maxRange, &kMax, &data.pMax, &data.r, &error_bound);
+    std::cout << "kMax: " << kMax << std::endl
+              << "pMax: " << data.pMax << std::endl
+              << "r: " << data.r << std::endl
+              << "error_bound: " << error_bound << std::endl;
+
+    kMax = 3;
+    int K = 0;
+    double rx = 0;
+    int clusterIndex[N];
+    double clusterCenters[d * kMax];
+    int numPoints[kMax];
+    double clusterRadii[kMax];
+    figtreeKCenterClustering(d, N, x, kMax, &K, &rx, clusterIndex, clusterCenters, numPoints, clusterRadii);
+    std::cout << std::endl;
+    std::cout << "### Clustering:" << std::endl
+              << "K: " << K << std::endl
+              << "rx: " << rx << std::endl;
+    std::cout << "clusterIndex: ";
+    for (int i = 0; i < N; ++i)
+    {
+        std::cout << clusterIndex[i] << ", "; 
+    }
+    std::cout << std::endl << "clusterCenters: ";
+    for (int i = 0; i < d * kMax; ++i)
+    {
+        std::cout << clusterCenters[i] << ", ";
+    }
+    std::cout << std::endl << "numPoints: ";
+    for (int i = 0; i < kMax; ++i)
+    {
+        std::cout << numPoints[i] << ", ";
+    }
+    std::cout << std::endl << "clusterRadii: ";
+    for (int i = 0; i < kMax; ++i)
+    {
+        std::cout << clusterRadii[i] << ", ";
+    }
 
     return 0;
 }
