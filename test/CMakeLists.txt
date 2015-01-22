@@ -1,6 +1,7 @@
 set(src
     center_monomials_test.cpp
     choose_parameters_test.cpp
+    cluster_test.cpp
     constant_series_test.cpp
     error_bound_test.cpp
     matrix_test.cpp

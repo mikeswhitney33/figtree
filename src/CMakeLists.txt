@@ -1,6 +1,7 @@
 set(src
     center_monomials.cpp
     choose_parameters.cpp
+    cluster.cpp
     constant_series.cpp
     matrix.cpp
     radius_bounds.cpp
