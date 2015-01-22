@@ -1,7 +1,4 @@
 {
-    "*": {
-        "dispatch": "ninja -C build && build/bin/figtree-test"
-    },
     "include/figtree/*.hpp": {
         "alternate": "src/{}.cpp",
         "type": "include",

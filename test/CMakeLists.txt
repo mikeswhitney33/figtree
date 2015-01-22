@@ -22,3 +22,5 @@ include_directories(
 
 add_executable(${FIGTREE_TEST_TARGET} ${src})
 target_link_libraries(${FIGTREE_TEST_TARGET} ${deps})
+
+add_test(unit-tests ${EXECUTABLE_OUTPUT_PATH}/${FIGTREE_TEST_TARGET})
