@@ -1,54 +1,68 @@
-"""
-Author: Vlad Morariu
-Created: 2012-01-25
-"""
-import sys
-import os
-
 from distutils.core import setup
 from distutils.extension import Extension
-from Cython.Distutils import build_ext
-
-import numpy
+import os
 
 
-CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
-FIGTREE_PATH = os.path.join(*os.path.split(CURRENT_DIR)[:-1])
-LIB_PATH = os.path.join(FIGTREE_PATH, "lib")
-INCLUDE_PATH = os.path.join(FIGTREE_PATH, "include")
+PY_DIR, _ = os.path.split(os.path.realpath(__file__))
+FIG_PATH, _ = os.path.split(PY_DIR)
+
+INCLUDE_PATH = os.path.join(FIG_PATH, "include")
+ANN_PATH = os.path.join(FIG_PATH, "external", "ann_1.1.1")
+ANN_INCLUDE_PATH = os.path.join(ANN_PATH, "include")
+ANN_SRC_PATH = os.path.join(ANN_PATH, "src")
+SRC_PATH = os.path.join(FIG_PATH, "src")
 
 
-def main():
-    """
-    performs the setup
-    """
-    if sys.platform != 'win32':
-        include_dirs = [INCLUDE_PATH, numpy.get_include()]
-        library_dirs = [LIB_PATH]
-        libraries = ['figtree', 'ann_figtree_version']
-        extra_compile_args = ['-DNDEBUG', '-O2']
-    else:
-        include_dirs = [INCLUDE_PATH, numpy.get_include()]
-        library_dirs = [LIB_PATH]
-        libraries = ['figtree', 'ann_figtree_version']
-        extra_compile_args = ['-O2']
+__version_str__ = "1.0.0"
 
-    ext_modules = [Extension(
+
+class lazy_cythonize(list):
+    def __init__(self, callback):
+        self._list, self.callback = None, callback
+    def c_list(self):
+        if self._list is None: self._list = self.callback()
+        return self._list
+    def __iter__(self):
+        for e in self.c_list(): yield e
+    def __getitem__(self, ii): return self.c_list()[ii]
+    def __len__(self): return len(self.c_list())
+
+
+def extensions():
+    import numpy
+    from Cython.Build import cythonize
+
+    fig_sources = [os.path.join(SRC_PATH, f) for f in os.listdir(SRC_PATH) if f[-4:] == ".cpp"]
+    ann_sources = [os.path.join(ANN_SRC_PATH, f) for f in os.listdir(ANN_SRC_PATH) if f[-4:] == ".cpp"]
+
+    print(fig_sources)
+    print(ann_sources)
+
+    numpy_include_dir = numpy.get_include()
+    figtree_module = Extension(
         "figtree",
-        ["figtree.pyx"],
+        [
+            "figtree.pyx",
+            *fig_sources,
+            *ann_sources
+        ],
         language="c++",
-        include_dirs=include_dirs,
-        library_dirs=library_dirs,
-        libraries=libraries,
-        extra_compile_args=extra_compile_args,
-        extra_link_args=[])]
+        include_dirs=[
+            ANN_SRC_PATH,
+            ANN_INCLUDE_PATH,
+            INCLUDE_PATH,
+            numpy_include_dir],
+    )
+    print(figtree_module.sources)
+    return cythonize([figtree_module])
 
-    for ext in ext_modules:
-        ext.pyrex_directives = {'embedsignature': True}
-
-    setup(
-        ext_modules=ext_modules,
-        cmdclass={'build_ext' : build_ext})
-
-if __name__ == "__main__":
-    main()
+setup(
+    name="Figtree",
+    version=__version_str__,
+    description="An implementation of the Fast Gauss Transform",
+    author="Vlad Morariu",
+    url="https://github.com/mikeswhitney33/figtree",
+    ext_modules=lazy_cythonize(extensions),
+    requires=['numpy','Cython'],
+    setup_requires=['numpy', 'Cython']
+)

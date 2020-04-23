@@ -1,50 +1,50 @@
 // File: figtree.cpp
 // Created:  11-03-06 by Vlad Morariu
 //
-// Modified:  6-22-07 by Vlad Morariu 
+// Modified:  6-22-07 by Vlad Morariu
 //   Initial changes from previous version of the IFGT code (written by Vikas C.
-//   Raykar and Changjiang Yang) and FIGTree code (written by Vikas C. Raykar).  
+//   Raykar and Changjiang Yang) and FIGTree code (written by Vikas C. Raykar).
 //
 //   Modifications include:
 //   1) Code can compile into a dynamic library that provides C-style interface
 //      without requiring Matlab.
 //
-//   2) Added an improved parameter selection method that removes assumption that 
-//      sources are uniformly distributed (observed large speedup in cases where 
-//      sources were not uniformly distributed, and often little slowdown from 
+//   2) Added an improved parameter selection method that removes assumption that
+//      sources are uniformly distributed (observed large speedup in cases where
+//      sources were not uniformly distributed, and often little slowdown from
 //      overhead when the sources were actually uniformly distributed).
 //
-//   3) Changed the IFGT code to take multiple sets of weights for same set of 
-//      sources and targets instead of having to call IFGT code multiple times.  
-//      By computing a set of coefficients for each weight set, much overhead is 
-//      saved (eg. computing monomials, and so on), resulting in significant 
+//   3) Changed the IFGT code to take multiple sets of weights for same set of
+//      sources and targets instead of having to call IFGT code multiple times.
+//      By computing a set of coefficients for each weight set, much overhead is
+//      saved (eg. computing monomials, and so on), resulting in significant
 //      speedup.
 //
-//   4) Added function (figtree()) that performs all parameter selection/clustering 
+//   4) Added function (figtree()) that performs all parameter selection/clustering
 //      using any choice of parameter selection and evaluation algorithms.
-// 
-//   5) Some bugs/problem cases were fixed (some bugs caused seg faults, others 
-//      were certain problem cases that could result in bad parameter selection 
+//
+//   5) Some bugs/problem cases were fixed (some bugs caused seg faults, others
+//      were certain problem cases that could result in bad parameter selection
 //      and, as a result, memory allocation errors or seg faults).
 //
-//   6) In the original implementation, most code resided in the constructor and 
-//      Evaluate() functions of a class, and was actually called in sequential 
-//      order as if it were a C function (thus not using any real advantages of 
+//   6) In the original implementation, most code resided in the constructor and
+//      Evaluate() functions of a class, and was actually called in sequential
+//      order as if it were a C function (thus not using any real advantages of
 //      C++ classes).  Thus, all code except for that of KCenterClustering, which
-//      seems to fit better in a class, has been put in C-style functions inside 
-//      of figtree.cpp.  The original location of the original source is indicated 
+//      seems to fit better in a class, has been put in C-style functions inside
+//      of figtree.cpp.  The original location of the original source is indicated
 //      in figtree.cpp before each function.
-//  
+//
 //   7) Stylistic changes (eg. variable naming conventions, function names, ...)
-//    
-// Modified:  9-23-07 by Vlad Morariu 
+//
+// Modified:  9-23-07 by Vlad Morariu
 //   Change code to compile on linux and solaris.
 //
-// Modified: 10-03-07 by Vlad Morariu 
-//   Remove requirement that data is in unit hypercube by adding 
+// Modified: 10-03-07 by Vlad Morariu
+//   Remove requirement that data is in unit hypercube by adding
 //   maxRange parameter to figtreeChoose* functions.
 //
-// Modified: 01-22-08 by Vlad Morariu 
+// Modified: 01-22-08 by Vlad Morariu
 //   Rename library to FIGTree (and some
 //   other function remanimg)
 //
@@ -55,23 +55,23 @@
 //
 // Modified: 02-21-08 by Vlad Morariu
 //   Allow rx to be zero (each pt has a cluster center on it), and allow
-//   figtreeChooseParametersNonUniform to choose a value of K that gives rx=0. 
+//   figtreeChooseParametersNonUniform to choose a value of K that gives rx=0.
 //   In some cases in higher dimensions, it is significantly cheaper to have
 //   a center at each pt (i.e. rx=0) than having even one cluster with nonzero
 //   radius (since the radius might require excessively high pMax).
-//   Also added FIGTREE_CHECK_POS_DOUBLE macro to allow rx to be zero when 
+//   Also added FIGTREE_CHECK_POS_DOUBLE macro to allow rx to be zero when
 //   checking input parameters.
 //
-// Modified: 05-03-08 by Vlad Morariu 
+// Modified: 05-03-08 by Vlad Morariu
 //   Add method selection code.  This set of functions uses a tree data structure
-//   and k-center clustering to estimate number of source neighbors, target neighbors, 
+//   and k-center clustering to estimate number of source neighbors, target neighbors,
 //   and ifgt parameters, which then allows us to estimate how much it would cost
 //   to evaluate using any of direct, direct+tree, ifgt, or ifgt+tree.
 //
-// Modified: 05-27-08 by Vlad Morariu 
+// Modified: 05-27-08 by Vlad Morariu
 //   Change figtreeChooseParameters* and figtreeChooseTruncationNumber functions
 //   to return the predicted errorBound.  This can then be used to check if
-//   the parameters chosen will satisfy the desired error bound (they may not 
+//   the parameters chosen will satisfy the desired error bound (they may not
 //   since we enforce a limit on pMax (the truncation number).
 //
 // Modified: 05-29-08 by Vlad Morariu
@@ -82,33 +82,33 @@
 // Modified: 05-29-08 to 06-10-08 by Vlad Morariu
 //   A few changes were made:
 //   1) Added code to choose individual truncation numbers for both targets and sources
-//       using pointwise error bounds. 
+//       using pointwise error bounds.
 //   2) Added code to choose individual truncation numbers for targets and sources
 //       using clusterwise error bounds.
-//   3) Reuse K-center clustering computed during method selection if 
+//   3) Reuse K-center clustering computed during method selection if
 //       FIGTREE_EVAL_AUTO is chosen.
 //   4) Changed ANN code to compute unordered nearest neighbors, saving time
-//       by not using a priority queue and also because now the fixed radius 
-//       nearest neighbor computation and retrieval is done in one step, 
+//       by not using a priority queue and also because now the fixed radius
+//       nearest neighbor computation and retrieval is done in one step,
 //       instead of first finding # of nn's and then doing the search again to
 //       retrieve the nn's.  This really speeds up direct+tree since the ANN
 //       priority queue was implemented using insertion sort.
 //
 // Modified: 11-02-08, 12-01-08 to 12-05-08 by Vlad Morariu
-//   Made some revisions before posting new version online.  
+//   Made some revisions before posting new version online.
 //   1) Changed interface of figtree so users can choose truncation method
-//      (also changed figtree() to automatically revert to the simplest 
-//      truncation method in cases where the two more complex methods 
+//      (also changed figtree() to automatically revert to the simplest
+//      truncation method in cases where the two more complex methods
 //      cannot give a speedup).
 //   2) Revised some comments
 //   3) Found all parameters used throughout code and defined constants for them
-//      so that users can change them and recompile.  In future releases, 
+//      so that users can change them and recompile.  In future releases,
 //      these should only be defaults, and users should be able to modify them
 //      at runtime.
-//   4) Removed most helper functions from figtree.h (all but figtree(), 
-//      figtreeChooseEvaluationMethod(), and figtreeKCenterClustering() ) and 
+//   4) Removed most helper functions from figtree.h (all but figtree(),
+//      figtreeChooseEvaluationMethod(), and figtreeKCenterClustering() ) and
 //      placed them in figtree_internal.h.
-//   5) Changed floating op estimation functions to reflect revised versions 
+//   5) Changed floating op estimation functions to reflect revised versions
 //      of code
 //
 // Modified: 2010/05/12 by Vlad Morariu
@@ -117,22 +117,22 @@
 //
 //
 //------------------------------------------------------------------------------
-// The code was written by Vlad Morariu, Vikas Raykar, and Changjiang Yang 
-// and is copyrighted under the Lesser GPL: 
+// The code was written by Vlad Morariu, Vikas Raykar, and Changjiang Yang
+// and is copyrighted under the Lesser GPL:
 //
-// Copyright (C) 2008 Vlad Morariu and Vikas Raykar and Changjiang Yang 
+// Copyright (C) 2008 Vlad Morariu and Vikas Raykar and Changjiang Yang
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as
 // published by the Free Software Foundation; version 2.1 or later.
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
-// See the GNU Lesser General Public License for more details. 
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+// See the GNU Lesser General Public License for more details.
 // You should have received a copy of the GNU Lesser General Public
 // License along with this program; if not, write to the Free Software
-// Foundation, Inc., 59 Temple Place - Suite 330, Boston, 
-// MA 02111-1307, USA.  
+// Foundation, Inc., 59 Temple Place - Suite 330, Boston,
+// MA 02111-1307, USA.
 //
 // The author may be contacted via email at:
 // morariu(at)umd(.)edu, vikas(at)umiacs(.)umd(.)edu, cyang(at)sarnoff(.)com
@@ -149,16 +149,16 @@
 //------------------------------------------------------------------------------
 
 #define P_UPPER_LIMIT 100        // upper limit on truncation numbers
-//#define C_UPPER_LIMIT 536870912  // upper limit for total amt of memory 
+//#define C_UPPER_LIMIT 536870912  // upper limit for total amt of memory
                                  // coefficients can use... NOT USED FOR NOW
 
 // these parameters are all for the method selection portion of the code
 #define M_SAMPLE                  50  // number of queries when querying tree
 #define N_SS_MIN                 100  // min number of source samples
-#define N_SS_POW                 .75  // the exponent for determining size of 
+#define N_SS_POW                 .75  // the exponent for determining size of
                                       //   subsampled set Nss = N^N_SS_POW
 #define K_LIMIT_TO_AVG_NBR_RATIO   2  // the max K we allow as ratio of avg source neighbors
-#define FLOPS_EXP                 28  // how many floating point ops does exp() 
+#define FLOPS_EXP                 28  // how many floating point ops does exp()
                                       //   take (machine dependent)
 
 //------------------------------------------------------------------------------
@@ -189,7 +189,7 @@
 
 #ifndef DBL_MAX
 #include <float.h>
-#endif 
+#endif
 
 // define MAX and MIN if not yet defined
 #ifndef MAX
@@ -211,10 +211,10 @@
 #undef printf
 #define printf mexPrintf
 
-/*  
+/*
 //Commented this out because when ANN is compiled as part of the same DLL
 //it uses the 'new()' definition below, which significantly slows it down.
-//I am not sure why the code in the ANN source files uses the 'new()' 
+//I am not sure why the code in the ANN source files uses the 'new()'
 //definition in figtree.cpp.
 inline
 void * operator new (size_t size)
@@ -226,7 +226,7 @@ void * operator new (size_t size)
 inline
 void operator delete (void *p)
 {
-  mxFree(p); 
+  mxFree(p);
 }
 */
 #endif
@@ -278,9 +278,9 @@ typedef struct _FigtreeData
 //  double epsilon;
 //  double * x;
 //  double h;
-//  double * q; 
+//  double * q;
 //  double * y;
-  
+
   // params for IFGT
   int pMax;
   int pMaxTotal;
@@ -295,7 +295,7 @@ typedef struct _FigtreeData
   // params for IFGT + Tree
   ANNpointArray annClusters;
   ANNkd_tree * annClustersKdTree;
-  
+
   // params for Direct + Tree
   ANNpointArray annSources;
   ANNkd_tree * annSourcesKdTree;
@@ -361,7 +361,7 @@ void figtreeReleaseData( FigtreeData * data )
   }
   if( data->annClustersKdTree != NULL )
   {
-    delete data->annClustersKdTree;  
+    delete data->annClustersKdTree;
     data->annClustersKdTree = NULL;
   }
 
@@ -372,7 +372,7 @@ void figtreeReleaseData( FigtreeData * data )
   }
   if( data->annSourcesKdTree != NULL )
   {
-    delete data->annSourcesKdTree;  
+    delete data->annSourcesKdTree;
     data->annSourcesKdTree = NULL;
   }
 #endif
@@ -391,14 +391,14 @@ void figtreeReleaseData( FigtreeData * data )
 int nchoosek(int n, int k)
 {
   int n_k = n - k;
-  
+
   if (k < n_k)
   {
     k = n_k;
     n_k = n - k;
   }
 
-  int nchsk = 1; 
+  int nchsk = 1;
   for ( int i = 1; i <= n_k; i++)
   {
     nchsk *= (++k);
@@ -417,14 +417,14 @@ int nchoosek(int n, int k)
 double nchoosek_double(int n, int k)
 {
   int n_k = n - k;
-  
+
   if (k < n_k)
   {
     k = n_k;
     n_k = n - k;
   }
 
-  double nchsk = 1; 
+  double nchsk = 1;
   for ( int i = 1; i <= n_k; i++)
   {
     nchsk *= (++k);
@@ -436,20 +436,20 @@ double nchoosek_double(int n, int k)
 
 //------------------------------------------------------------------------------
 // This function computes the constants  2^alpha/alpha!.
-// Originally compute_constant_series from ImprovedFastGaussTransform.cpp (IFGT 
+// Originally compute_constant_series from ImprovedFastGaussTransform.cpp (IFGT
 // source code).
 //
 // Modified by Vlad Morariu on 2007-06-19.
 //------------------------------------------------------------------------------
 void computeConstantSeries( int d, int pMaxTotal, int pMax, double * constantSeries )
-{ 
+{
   int *heads = new int[d+1];
   int *cinds = new int[pMaxTotal];
-  
+
   for (int i = 0; i < d; i++)
     heads[i] = 0;
   heads[d] = INT_MAX;
-  
+
   cinds[0] = 0;
   constantSeries[0] = 1.0;
   for (int k = 1, t = 1, tail = 1; k < pMax; k++, tail = t)
@@ -466,22 +466,22 @@ void computeConstantSeries( int d, int pMaxTotal, int pMax, double * constantSer
       }
     }
   }
-  
+
   delete [] cinds;
-  delete [] heads; 
+  delete [] heads;
 }
 
 //------------------------------------------------------------------------------
-// This function computes the monomials [(x_i-c_k)/h]^{alpha} and 
+// This function computes the monomials [(x_i-c_k)/h]^{alpha} and
 // norm([(x_i-c_k)/h])^2.
-// Originally compute_source_center_monomials from 
+// Originally compute_source_center_monomials from
 // ImprovedFastGaussTransform.cpp (IFGT source code).
 //
 // Modified by Vlad Morariu on 2007-06-19.
 //------------------------------------------------------------------------------
-void computeSourceCenterMonomials( int d, double h, double * dx, 
+void computeSourceCenterMonomials( int d, double h, double * dx,
                                    int p, double * sourceCenterMonomials )
-{    
+{
   int * heads = new int[d];
 
   for (int i = 0; i < d; i++)
@@ -489,7 +489,7 @@ void computeSourceCenterMonomials( int d, double h, double * dx,
     dx[i]=dx[i]/h;
     heads[i] = 0;
   }
-    
+
   sourceCenterMonomials[0] = 1.0;
   for (int k = 1, t = 1, tail = 1; k < p; k++, tail = t)
   {
@@ -499,22 +499,22 @@ void computeSourceCenterMonomials( int d, double h, double * dx,
       heads[i] = t;
       for ( int j = head; j < tail; j++, t++)
         sourceCenterMonomials[t] = dx[i] * sourceCenterMonomials[j];
-    }            
-  }          
+    }
+  }
 
   delete [] heads;
 }
 
 //------------------------------------------------------------------------------
 // This function computes the monomials [(y_j-c_k)/h]^{alpha}
-// Originally compute_target_center_monomials from 
+// Originally compute_target_center_monomials from
 // ImprovedFastGaussTransform.cpp (IFGT source code).
 //
 // Modified by Vlad Morariu on 2007-06-19.
 //------------------------------------------------------------------------------
-void computeTargetCenterMonomials( int d, double h, double * dy, 
+void computeTargetCenterMonomials( int d, double h, double * dy,
                                    int pMax, double * targetCenterMonomials )
-{    
+{
   int *heads = new int[d];
 
   for (int i = 0; i < d; i++)
@@ -522,7 +522,7 @@ void computeTargetCenterMonomials( int d, double h, double * dy,
     dy[i] = dy[i]/h;
     heads[i] = 0;
   }
-    
+
   targetCenterMonomials[0] = 1.0;
   for (int k = 1, t = 1, tail = 1; k < pMax; k++, tail = t)
   {
@@ -532,13 +532,13 @@ void computeTargetCenterMonomials( int d, double h, double * dy,
       heads[i] = t;
       for ( int j = head; j < tail; j++, t++)
         targetCenterMonomials[t] = dy[i] * targetCenterMonomials[j];
-    }            
-  }          
+    }
+  }
 
   delete [] heads;
 }
 //------------------------------------------------------------------------------
-// Given error(a,b,p) = (2^p/p!) * (a/h)^p * (b/h)^p * e^(-(a-b)^2/h^2), 
+// Given error(a,b,p) = (2^p/p!) * (a/h)^p * (b/h)^p * e^(-(a-b)^2/h^2),
 // calculates the maximum error given only a and the maximum possible b value
 //   a - radius of source (target) point
 //   b_max - maximum radius of target (source) point
@@ -565,13 +565,13 @@ double figtreeOneSidedErrorBound( double a, double b_max, double c, double h2, i
 //   b_max - maximum radius of target (source) point
 //   c - constant term (2^p/p!)
 //   h2 - bandwidth, squared
-//   p - truncation number 
+//   p - truncation number
 //   epsilon - desired error bound
 //   max_it - number of iterations of halving the interval [lo,hi]
 //
 // Created by Vlad Morariu on 2008-06-04
 //------------------------------------------------------------------------------
-void figtreeFindRadiusBounds( double a_lo, double a_hi, double b_max, 
+void figtreeFindRadiusBounds( double a_lo, double a_hi, double b_max,
                               double c, double h2, int p, double epsilon,
                               int max_it, double * lo_out, double * hi_out )
 {
@@ -588,7 +588,7 @@ void figtreeFindRadiusBounds( double a_lo, double a_hi, double b_max,
     bool sat_lo = (figtreeOneSidedErrorBound( a_lo, b_max, c, h2 ,p ) <= epsilon);
     if( !sat_lo )
     {
-      // the bounds are not satisfied at a_lo (and since we assume error to increase 
+      // the bounds are not satisfied at a_lo (and since we assume error to increase
       // monotonically from a_lo to a_hi, it is not satisfied in this range)
       *hi_out = a_hi;
       *lo_out = 2*a_lo - a_hi;  // go a little past a_lo to signal that not even a_lo satisfied error
@@ -614,7 +614,7 @@ void figtreeFindRadiusBounds( double a_lo, double a_hi, double b_max,
 //------------------------------------------------------------------------------
 // This function precomputes, for each truncation number, the range in the
 //   distance of a source from the cluster center so that error is still satisfied.
-//   This is used in the point-wise adaptive version of the IFGT. 
+//   This is used in the point-wise adaptive version of the IFGT.
 //
 // Created by Vlad Morariu on 2008-06-04.
 //------------------------------------------------------------------------------
@@ -648,7 +648,7 @@ void figtreeTargetTruncationRanges( double r, double rx, double h, double epsilo
   double ry = r + rx;
   for( int i = 0; i < pMax-1; i++ )
   {
-    max_target_dists2[i] = -1;   
+    max_target_dists2[i] = -1;
     min_target_dists2[i] = ry*ry+1;
   }
 
@@ -659,15 +659,15 @@ void figtreeTargetTruncationRanges( double r, double rx, double h, double epsilo
 
     double peak_dist = .5*(rx + sqrt( rx*rx + 2*h2*(i+1) ));
 
-    // here we calculate for each value of p the maximum distance from a cluster center 
-    //   that a target can be to satisfy the error bounds, provided the distance is 
+    // here we calculate for each value of p the maximum distance from a cluster center
+    //   that a target can be to satisfy the error bounds, provided the distance is
     //   in the portion of the error bound that monotonically increases with distance
     double a_lo = 0, a_hi = MIN(ry,peak_dist);
     figtreeFindRadiusBounds( a_lo, a_hi, rx, c, h2, i+1, epsilon, 10, &a_lo, &a_hi );
     max_target_dists2[i] = a_lo*a_lo;
 
-    // here we calculate for each value of p the minimum distance from a cluster center 
-    //   that a target can be to satisfy the error bounds, provided the radius is 
+    // here we calculate for each value of p the minimum distance from a cluster center
+    //   that a target can be to satisfy the error bounds, provided the radius is
     //   in the portion of the error bound that monotonically increases with distance
     if( peak_dist <= ry )
     {
@@ -677,12 +677,12 @@ void figtreeTargetTruncationRanges( double r, double rx, double h, double epsilo
     } // otherwise we leave it at ry*ry+1 (it should have been initialized to this
 
     if( i > 0 && min_target_dists2[i] > min_target_dists2[i-1] )
-    { 
+    {
       min_target_dists2[i] = min_target_dists2[i-1];
     }
   }
   if( pMax > 1 && min_target_dists2[pMax-1] > min_target_dists2[pMax-2] )
-  { 
+  {
     min_target_dists2[pMax-1] = min_target_dists2[pMax-2];
   }
 
@@ -690,7 +690,7 @@ void figtreeTargetTruncationRanges( double r, double rx, double h, double epsilo
 
 
 //------------------------------------------------------------------------------
-// Given the precomputed distances from the cluster center for which 
+// Given the precomputed distances from the cluster center for which
 //   the error bound is satisfied for each truncation number, and the actual
 //   distance from the cluster center, this function finds the lowest truncation
 //   number so that error is still satisfied.
@@ -700,11 +700,11 @@ void figtreeTargetTruncationRanges( double r, double rx, double h, double epsilo
 inline
 int figtreeSourceTruncationNumber( double dx2, int pMax, double * max_source_dists2 )
 {
-  return (int)(std::lower_bound( max_source_dists2, max_source_dists2 + pMax - 1, dx2) - max_source_dists2) + 1;  
+  return (int)(std::lower_bound( max_source_dists2, max_source_dists2 + pMax - 1, dx2) - max_source_dists2) + 1;
 }
 
 //------------------------------------------------------------------------------
-// Given the precomputed distances from the cluster center for which 
+// Given the precomputed distances from the cluster center for which
 //   the error bound is satisfied for each truncation number, and the actual
 //   distance from the cluster center, this function finds the lowest truncation
 //   number so that error is still satisfied.
@@ -718,7 +718,7 @@ int figtreeTargetTruncationNumber( double dy2, int pMax, double * max_target_dis
     return (int)(std::lower_bound( max_target_dists2, max_target_dists2 + pMax - 1, dy2) - max_target_dists2) + 1;
   else if( dy2 >= min_target_dists2[pMax-2] )
     return (int)(std::lower_bound( min_target_dists2, min_target_dists2 + pMax - 1, dy2, std::greater<double>() ) - min_target_dists2) + 1;
-  else 
+  else
     return pMax;
 }
 
@@ -728,7 +728,7 @@ int figtreeTargetTruncationNumber( double dy2, int pMax, double * max_target_dis
 //
 // Modified by Vlad Morariu on 2007-06-19.
 //------------------------------------------------------------------------------
-void computeC( int d, int N, int W, int K, int pMaxTotal, int pMax, 
+void computeC( int d, int N, int W, int K, int pMaxTotal, int pMax,
                double h, int * clusterIndex, double * x, double * q,
                double * clusterCenter, double * C )
 {
@@ -754,9 +754,9 @@ void computeC( int d, int N, int W, int K, int pMaxTotal, int pMax,
       dx[j] = (x[sourceBase+j] - clusterCenter[centerBase+j]);
       sourceCenterDistanceSquare += (dx[j]*dx[j]);
     }
-  
-    computeSourceCenterMonomials( d, h, dx, pMax, sourceCenterMonomials );    
-    
+
+    computeSourceCenterMonomials( d, h, dx, pMax, sourceCenterMonomials );
+
     for(int w = 0; w < W; w++ )
     {
       double f = q[N*w + i]*exp(-sourceCenterDistanceSquare/hSquare);
@@ -764,19 +764,19 @@ void computeC( int d, int N, int W, int K, int pMaxTotal, int pMax,
       {
           C[(K*w + k)*pMaxTotal + alpha] += (f*sourceCenterMonomials[alpha]);
       }
-    }  
+    }
   }
 
   computeConstantSeries( d, pMaxTotal, pMax, constantSeries );
 
   for(int w = 0; w < W; w++)
-  {   
+  {
     for(int k = 0; k < K; k++)
     {
       for(int alpha = 0; alpha < pMaxTotal; alpha++)
       {
         C[(K*w + k)*pMaxTotal + alpha] *= constantSeries[alpha];
-      } 
+      }
     }
   }
 
@@ -786,23 +786,23 @@ void computeC( int d, int N, int W, int K, int pMaxTotal, int pMax,
 }
 
 //------------------------------------------------------------------------------
-// This function computes a separate truncation number for each cluster that 
-//   satisfies the total allowed cluster-wise error.  This means that some 
-//   sources are allowed to contribute more error as long as others contribute 
-//   less.  The speedup is observed mostly in higher dimensions since finding 
-//   the cluster-wise truncation numbers adds to the overhead cost.  The 
-//   truncations for each cluster are found by doing a binary search over 
+// This function computes a separate truncation number for each cluster that
+//   satisfies the total allowed cluster-wise error.  This means that some
+//   sources are allowed to contribute more error as long as others contribute
+//   less.  The speedup is observed mostly in higher dimensions since finding
+//   the cluster-wise truncation numbers adds to the overhead cost.  The
+//   truncations for each cluster are found by doing a binary search over
 //   the truncation number, p.
-// 
-// See 'Automatic online tuning for fast Gaussian summation,' by Morariu et al, 
-//   NIPS 2008 for details.  
 //
-// NOTES: 1) This function currently only works when only one set of weights 'q' 
-//           are used (i.e. W=1).  It can be extended to W>1, but I have not had 
+// See 'Automatic online tuning for fast Gaussian summation,' by Morariu et al,
+//   NIPS 2008 for details.
+//
+// NOTES: 1) This function currently only works when only one set of weights 'q'
+//           are used (i.e. W=1).  It can be extended to W>1, but I have not had
 //           time to clean up that part of the code for release yet.
-//   
-//        2) Also, this function does not currently compute multiple 'regions' 
-//           for targets where different cluster-wise truncation numbers are used 
+//
+//        2) Also, this function does not currently compute multiple 'regions'
+//           for targets where different cluster-wise truncation numbers are used
 //           depending on what region targets are in.
 //
 // Created by Vlad Morariu on 2008-06-04.
@@ -835,12 +835,12 @@ void figtreeFindClusterTruncations( int d, int N, double * x, double * q, double
     clusterStart[i] = clusterStart[i-1] + numPoints[i-1];
     clusterEnd[i] = clusterStart[i];
   }
- 
+
   for( int i = 0; i < N; i++ )
     clusterMembers[clusterEnd[clusterIndex[i]]++] = i;
 
-  // compute the distance from points to clusters, and 
-  //   reorder them so that the weights 'q_reordered' and cluster 
+  // compute the distance from points to clusters, and
+  //   reorder them so that the weights 'q_reordered' and cluster
   //   distances 'pointClusterDists' for points that belong to the
   //   same cluster are contiguous in memory (reduces memory access overhead).
   for( int k = 0; k < K; k++ )
@@ -865,13 +865,13 @@ void figtreeFindClusterTruncations( int d, int N, double * x, double * q, double
     constants[p-1] = constants[p-2]*2.0/p;
 
   // find the lowest p for each cluster such that the total error per cluster meets the error bound using
-  // a binary search based algorithm.  If for some reason, there exists a p_i > p_j such that 
+  // a binary search based algorithm.  If for some reason, there exists a p_i > p_j such that
   // error is met for p_j but not for p_i, (i.e. the p's are not ordered), the resulting p is still guaranteed
   // to satisfy error, though it may not be the lowest p that satisfies error.
   for( int k = 0; k < K; k++ )
   {
     int start = clusterStart[k], end = clusterEnd[k];
-  
+
     int p_lo = 1, p_hi = pMax;
     while( p_lo < p_hi )
     {
@@ -888,7 +888,7 @@ void figtreeFindClusterTruncations( int d, int N, double * x, double * q, double
       else
         p_hi = p_mid;
     }
-    
+
     clusterTruncations[k] = p_hi;
   }
 
@@ -903,12 +903,12 @@ void figtreeFindClusterTruncations( int d, int N, double * x, double * q, double
 
 //------------------------------------------------------------------------------
 // This function computes the cluster coefficients using a separate truncation
-//   number for each cluster that satisfies the total allowed cluster-wise error.  
+//   number for each cluster that satisfies the total allowed cluster-wise error.
 //   The clusterwise truncation numbers are returned by the function
-//   figtreeFindClusterTruncations().  
-// 
-// See 'Automatic online tuning for fast Gaussian summation,' by Morariu et al, 
-//   NIPS 2008 for details.  
+//   figtreeFindClusterTruncations().
+//
+// See 'Automatic online tuning for fast Gaussian summation,' by Morariu et al,
+//   NIPS 2008 for details.
 //
 // NOTES: 1) Because figtreeFindClusterTruncations() only takes one set of weights
 //           into account when computing cluster-wise truncations, this function
@@ -916,14 +916,14 @@ void figtreeFindClusterTruncations( int d, int N, double * x, double * q, double
 //           When figtreeFindClusterTruncations is modified to consider all W sets
 //           of weights, this function should work properly.  Thus, W=1 is assumed
 //           for now even though it is part of the input arguments.
-//   
-//        2) Also, this function does not currently use multiple 'regions' 
-//           for targets where different cluster-wise truncation numbers are used 
+//
+//        2) Also, this function does not currently use multiple 'regions'
+//           for targets where different cluster-wise truncation numbers are used
 //           depending on what region targets are in.
 //
 // Created by Vlad Morariu on 2008-06-04.
 //------------------------------------------------------------------------------
-void computeCAdaptiveCluster( int d, int N, int W, int K, int pMaxTotal, int pMax, 
+void computeCAdaptiveCluster( int d, int N, int W, int K, int pMaxTotal, int pMax,
                        double h, int * clusterIndex, double * x, double * q,
                        double * clusterCenter, int * clusterTruncations, int * pMaxTotals, double * C )
 {
@@ -946,11 +946,11 @@ void computeCAdaptiveCluster( int d, int N, int W, int K, int pMaxTotal, int pMa
       dx[j] = (x[sourceBase+j] - clusterCenter[centerBase+j]);
       sourceCenterDistanceSquare += (dx[j]*dx[j]);
     }
-  
+
     int p = clusterTruncations[k];
     int pTotal = pMaxTotals[p-1];
-    computeSourceCenterMonomials( d, h, dx, p, sourceCenterMonomials );    
-    
+    computeSourceCenterMonomials( d, h, dx, p, sourceCenterMonomials );
+
     for(int w = 0; w < W; w++ )
     {
       double f = q[N*w + i]*exp(-sourceCenterDistanceSquare/hSquare);
@@ -958,19 +958,19 @@ void computeCAdaptiveCluster( int d, int N, int W, int K, int pMaxTotal, int pMa
       {
           C[(K*w + k)*pMaxTotal + alpha] += (f*sourceCenterMonomials[alpha]);
       }
-    }  
+    }
   }
 
   computeConstantSeries( d, pMaxTotal, pMax, constantSeries );
 
   for(int w = 0; w < W; w++)
-  {   
+  {
     for(int k = 0; k < K; k++)
     {
       for(int alpha = 0; alpha < pMaxTotal; alpha++)
       {
         C[(K*w + k)*pMaxTotal + alpha] *= constantSeries[alpha];
-      } 
+      }
     }
   }
 
@@ -980,18 +980,18 @@ void computeCAdaptiveCluster( int d, int N, int W, int K, int pMaxTotal, int pMa
 }
 
 //------------------------------------------------------------------------------
-// This function computes the cluster coefficients allowing each source point 
+// This function computes the cluster coefficients allowing each source point
 //   to have a variable truncation number that still satisfies the desired error
 //   assuming the worst-case target point.
-// 
-// See 'Automatic online tuning for fast Gaussian summation,' by Morariu et al, 
-//   NIPS 2008 for details.  
+//
+// See 'Automatic online tuning for fast Gaussian summation,' by Morariu et al,
+//   NIPS 2008 for details.
 //
 // NOTES: Unlike the cluster-wise adaptive version, this does work for W>1.
 //
 // Created by Vlad Morariu on 2008-06-04.
 //------------------------------------------------------------------------------
-void computeCAdaptivePoint( int d, int N, int W, int K, int pMaxTotal, int pMax, 
+void computeCAdaptivePoint( int d, int N, int W, int K, int pMaxTotal, int pMax,
                        double h, int * clusterIndex, double * x, double * q,
                        double * clusterCenter, double * maxSourceDists2, int * pMaxTotals, double * C )
 {
@@ -1017,12 +1017,12 @@ void computeCAdaptivePoint( int d, int N, int W, int K, int pMaxTotal, int pMax,
       dx[j] = (x[sourceBase+j] - clusterCenter[centerBase+j]);
       sourceCenterDistanceSquare += (dx[j]*dx[j]);
     }
-  
+
     int p = figtreeSourceTruncationNumber( sourceCenterDistanceSquare, pMax, maxSourceDists2 );
     int pTotal = pMaxTotals[p-1];
-    //pHistogram[p-1]++;    
-    computeSourceCenterMonomials( d, h, dx, p, sourceCenterMonomials );    
-    
+    //pHistogram[p-1]++;
+    computeSourceCenterMonomials( d, h, dx, p, sourceCenterMonomials );
+
     for(int w = 0; w < W; w++ )
     {
       double f = q[N*w + i]*exp(-sourceCenterDistanceSquare/hSquare);
@@ -1030,19 +1030,19 @@ void computeCAdaptivePoint( int d, int N, int W, int K, int pMaxTotal, int pMax,
       {
           C[(K*w + k)*pMaxTotal + alpha] += (f*sourceCenterMonomials[alpha]);
       }
-    }  
+    }
   }
 
   computeConstantSeries( d, pMaxTotal, pMax, constantSeries );
 
   for(int w = 0; w < W; w++)
-  {   
+  {
     for(int k = 0; k < K; k++)
     {
       for(int alpha = 0; alpha < pMaxTotal; alpha++)
       {
         C[(K*w + k)*pMaxTotal + alpha] *= constantSeries[alpha];
-      } 
+      }
     }
   }
 
@@ -1068,11 +1068,11 @@ void computeCAdaptivePoint( int d, int N, int W, int K, int pMaxTotal, int pMax,
 //
 // Modified by Vlad Morariu on 2007-06-21.
 //
-// Modified by Vlad Morariu on 2008-06-04. 
+// Modified by Vlad Morariu on 2008-06-04.
 //
 //    - Added changes described in 'Automatic online tuning for fast Gaussian
 //      summation,' by Morariu et al, NIPS 2008 for details).
-//    - added FIGTREE_EVAL_AUTO eval method which allows FIGTREE to pick 
+//    - added FIGTREE_EVAL_AUTO eval method which allows FIGTREE to pick
 //      the evaluation method that is predicted to be the fastest, making
 //      FIGTREE a black box apprach
 //    - added point-wise and cluster-wise adaptive versions of the IFGT (instead
@@ -1085,7 +1085,7 @@ void computeCAdaptivePoint( int d, int N, int W, int K, int pMaxTotal, int pMax,
 //      possibilities, separating evaluation method from truncation number choices
 //    - removed 'forceK' option, since it was used only for debugging
 //------------------------------------------------------------------------------
-int figtree( int d, int N, int M, int W, double * x, double h, 
+int figtree( int d, int N, int M, int W, double * x, double h,
              double * q, double * y, double epsilon, double * g,
              int evalMethod, int ifgtParamMethod, int ifgtTruncMethod, int verbose )
 {
@@ -1117,7 +1117,7 @@ int figtree( int d, int N, int M, int W, double * x, double h,
 
   // for FIGTREE_EVAL_IFGT and FIGTREE_EVAL_IFGT_TREE, we must first compute
   //   parameters
-  if( evalMethod == FIGTREE_EVAL_IFGT || 
+  if( evalMethod == FIGTREE_EVAL_IFGT ||
       evalMethod == FIGTREE_EVAL_IFGT_TREE )
   {
     if(verbose && evalMethod == FIGTREE_EVAL_IFGT)
@@ -1125,7 +1125,7 @@ int figtree( int d, int N, int M, int W, double * x, double h,
     if(verbose && evalMethod == FIGTREE_EVAL_IFGT_TREE)
       verbose && printf("figtreeEvalMethod() chose the IFGT+tree method.\n");
 
-    bool alreadyHaveClustering = (data.clusterCenters != NULL); // quick and dirty test    
+    bool alreadyHaveClustering = (data.clusterCenters != NULL); // quick and dirty test
     double maxRange = 0;
     if( !alreadyHaveClustering )
     {
@@ -1151,23 +1151,23 @@ int figtree( int d, int N, int M, int W, double * x, double h,
         ret = figtreeChooseParametersUniform( d, h, epsilon, kLimit, maxRange, &kMax, &data.pMax, &data.r, NULL );
       if( ret < 0 )
       {
-        printf("figtree: figtreeChooseParameters%sUniform() failed.\n", 
+        printf("figtree: figtreeChooseParameters%sUniform() failed.\n",
                ((ifgtParamMethod == FIGTREE_PARAM_NON_UNIFORM) ? "Non" : ""));
         return ret;
       }
 
-      verbose && printf("figtreeChooseParameters%sUniform() chose p=%i, k=%i.\n", 
+      verbose && printf("figtreeChooseParameters%sUniform() chose p=%i, k=%i.\n",
                         ((ifgtParamMethod == FIGTREE_PARAM_NON_UNIFORM) ? "Non" : ""), data.pMax, kMax );
 
       //
       // do k-center clustering
       //
       data.clusterIndex = new int[N];
-      data.numPoints    = new int[kMax]; 
+      data.numPoints    = new int[kMax];
       data.clusterCenters = new double[d*kMax];
       data.clusterRadii = new double[kMax];
 
-      ret = figtreeKCenterClustering( d, N, x, kMax, &data.K, &data.rx, data.clusterIndex, 
+      ret = figtreeKCenterClustering( d, N, x, kMax, &data.K, &data.rx, data.clusterIndex,
                                    data.clusterCenters, data.numPoints, data.clusterRadii );
       if( ret < 0 )
         printf("figtree: figtreeKCenterClustering() failed.\n");
@@ -1185,12 +1185,12 @@ int figtree( int d, int N, int M, int W, double * x, double h,
         if( verbose && errorBound > epsilon )
           printf("figtreeChooseTruncationNumber(): could not find p within limit that satisfies error bound!\n" );
       }
-    } 
+    }
 
     if( ret >= 0 )
     {
       // evaluate IFGT
-      verbose && printf( "Eval IFGT(h= %3.2e, pMax= %i, K= %i, r= %3.2e, rx= %3.2e, eps= %3.2e)\n", 
+      verbose && printf( "Eval IFGT(h= %3.2e, pMax= %i, K= %i, r= %3.2e, rx= %3.2e, eps= %3.2e)\n",
                          h, data.pMax, data.K, data.r, data.rx, epsilon);
 
       // if maximum truncation is 1, then nothing can be gained by doing individual truncations
@@ -1209,13 +1209,13 @@ int figtree( int d, int N, int M, int W, double * x, double h,
 
       if( evalMethod == FIGTREE_EVAL_IFGT && ifgtTruncMethod == FIGTREE_TRUNC_POINT )
       {
-        ret = figtreeEvaluateIfgtAdaptivePoint( d, N, M, W, x, h, q, y, data.pMax, data.K, data.clusterIndex, 
+        ret = figtreeEvaluateIfgtAdaptivePoint( d, N, M, W, x, h, q, y, data.pMax, data.K, data.clusterIndex,
                                                     data.clusterCenters, data.clusterRadii, data.r, epsilon, g );
       }
 
       if( evalMethod == FIGTREE_EVAL_IFGT_TREE && ifgtTruncMethod == FIGTREE_TRUNC_POINT )
       {
-        ret = figtreeEvaluateIfgtTreeAdaptivePoint( d, N, M, W, x, h, q, y, data.pMax, data.K, data.clusterIndex, 
+        ret = figtreeEvaluateIfgtTreeAdaptivePoint( d, N, M, W, x, h, q, y, data.pMax, data.K, data.clusterIndex,
                                                     data.clusterCenters, data.clusterRadii, data.r, epsilon, g );
       }
 
@@ -1228,12 +1228,12 @@ int figtree( int d, int N, int M, int W, double * x, double h,
           pMaxNew = MAX(pMaxNew, clusterTruncations[i]);
         if( evalMethod == FIGTREE_EVAL_IFGT )
         {
-          ret = figtreeEvaluateIfgtAdaptiveCluster( d, N, M, W, x, h, q, y, pMaxNew, data.K, data.clusterIndex, 
+          ret = figtreeEvaluateIfgtAdaptiveCluster( d, N, M, W, x, h, q, y, pMaxNew, data.K, data.clusterIndex,
                                                       data.clusterCenters, data.clusterRadii, data.r, epsilon, clusterTruncations, g );
         }
         else // evalMethod == FIGTREE_EVAL_IFGT_TREE
         {
-          ret = figtreeEvaluateIfgtTreeAdaptiveCluster( d, N, M, W, x, h, q, y, pMaxNew, data.K, data.clusterIndex, 
+          ret = figtreeEvaluateIfgtTreeAdaptiveCluster( d, N, M, W, x, h, q, y, pMaxNew, data.K, data.clusterIndex,
                                                       data.clusterCenters, data.clusterRadii, data.r, epsilon, clusterTruncations, g );
         }
 
@@ -1242,19 +1242,19 @@ int figtree( int d, int N, int M, int W, double * x, double h,
 
       if( evalMethod == FIGTREE_EVAL_IFGT && ifgtTruncMethod == FIGTREE_TRUNC_MAX )
       {
-        ret = figtreeEvaluateIfgt( d, N, M, W, x, h, q, y, data.pMax, data.K, data.clusterIndex, 
+        ret = figtreeEvaluateIfgt( d, N, M, W, x, h, q, y, data.pMax, data.K, data.clusterIndex,
                                      data.clusterCenters, data.clusterRadii, data.r, epsilon, g );
       }
 
       if( evalMethod == FIGTREE_EVAL_IFGT_TREE && ifgtTruncMethod == FIGTREE_TRUNC_MAX )
       {
-        ret = figtreeEvaluateIfgtTree( d, N, M, W, x, h, q, y, data.pMax, data.K, data.clusterIndex, 
+        ret = figtreeEvaluateIfgtTree( d, N, M, W, x, h, q, y, data.pMax, data.K, data.clusterIndex,
                                         data.clusterCenters, data.clusterRadii, data.r, epsilon, g );
       }
 
       if( ret < 0 )
       {
-        printf("figtree: figtreeEvaluateIfgt%s*() failed.\n", 
+        printf("figtree: figtreeEvaluateIfgt%s*() failed.\n",
                ((evalMethod == FIGTREE_EVAL_IFGT_TREE) ? "Tree" : ""));
       }
     }
@@ -1270,8 +1270,8 @@ int figtree( int d, int N, int M, int W, double * x, double h,
 // Chooses minimum truncation number that satisfies desired error, given
 //   the maximum radius of any cluster (rx).
 //
-// Originally constructor from 
-// ImprovedFastGaussTransformChooseTruncationNumber.cpp (IFGT source code) by 
+// Originally constructor from
+// ImprovedFastGaussTransformChooseTruncationNumber.cpp (IFGT source code) by
 // Vikas C. Raykar.
 //
 // Modified by Vlad Morariu on 2007-06-20
@@ -1279,7 +1279,7 @@ int figtree( int d, int N, int M, int W, double * x, double h,
 //     any source and target) as argument instead of assuming that data fits
 //     in unit hypercube
 //------------------------------------------------------------------------------
-int figtreeChooseTruncationNumber( int d, double h, double epsilon, 
+int figtreeChooseTruncationNumber( int d, double h, double epsilon,
                                 double rx, double maxRange, int * pMax, double * errorBound )
 {
   // check input arguments
@@ -1294,7 +1294,7 @@ int figtreeChooseTruncationNumber( int d, double h, double epsilon,
   double hSquare = h*h;
   double r = MIN(R, h*sqrt(log(1/epsilon)));
   double rxSquare = rx*rx;
-  
+
   double error = epsilon + 1;
   double temp = 1;
   int p = 0;
@@ -1304,8 +1304,8 @@ int figtreeChooseTruncationNumber( int d, double h, double epsilon,
     double b = MIN(((rx + sqrt((rxSquare) + (2*p*hSquare)))/2), rx + r);
     double c = rx - b;
     temp = temp*(((2*rx*b)/hSquare)/p);
-    error = temp*(exp(-(c*c)/hSquare));      
-  } */ 
+    error = temp*(exp(-(c*c)/hSquare));
+  } */
   while((error > epsilon) & (p <= P_UPPER_LIMIT))
   {
     p++;
@@ -1314,8 +1314,8 @@ int figtreeChooseTruncationNumber( int d, double h, double epsilon,
     temp = 1;
     for( int i = 1; i <= p; i++ )
       temp = temp*((2.0*rx*b/hSquare)/i);
-    error = temp*(exp(-(c*c)/hSquare));      
-  }  
+    error = temp*(exp(-(c*c)/hSquare));
+  }
   if( pMax != NULL )
     *pMax = p;
   if( errorBound != NULL )
@@ -1329,12 +1329,12 @@ int figtreeChooseTruncationNumber( int d, double h, double epsilon,
 //
 // Implementation based on:
 //
-// Fast computation of sums of Gaussians in high dimensions. 
+// Fast computation of sums of Gaussians in high dimensions.
 // Vikas C. Raykar, C. Yang, R. Duraiswami, and N. Gumerov,
 // CS-TR-4767, Department of computer science,
 // University of Maryland, Collegepark.
 //
-// Originally constructor from ImprovedFastGaussTransformChooseParameters.cpp 
+// Originally constructor from ImprovedFastGaussTransformChooseParameters.cpp
 //   by Vikas C. Raykar. (IFGT source code)
 //
 // Modified by Vlad Morariu on 2007-06-20
@@ -1344,7 +1344,7 @@ int figtreeChooseTruncationNumber( int d, double h, double epsilon,
 // Modified by Vlad Morariu on 2008-06-04 - change the way bound is computed to
 //     be more precise
 //------------------------------------------------------------------------------
-int figtreeChooseParametersUniform( int d, double h, double epsilon, 
+int figtreeChooseParametersUniform( int d, double h, double epsilon,
                                  int kLimit, double maxRange, int * K, int * pMax, double * r, double * errorBound )
 {
   // check input arguments
@@ -1359,7 +1359,7 @@ int figtreeChooseParametersUniform( int d, double h, double epsilon,
   double complexityMin = DBL_MAX;
 
   // These variables will hold the values that will then be returned.
-  // We use temporary variables in case caller does not care about a variable 
+  // We use temporary variables in case caller does not care about a variable
   // and passes a NULL pointer.
   int kTemp = 1;
   int pMaxTemp = P_UPPER_LIMIT + 1;
@@ -1382,8 +1382,8 @@ int figtreeChooseParametersUniform( int d, double h, double epsilon,
       temp = 1;
       for( int j = 1; j <= p; j++ )
         temp = temp*((2.0*rx*b/hSquare)/j);
-      error = temp*(exp(-(c*c)/hSquare));      
-    }  
+      error = temp*(exp(-(c*c)/hSquare));
+    }
     double complexity = (i + 1) + log((double)i + 1) + ((1 + n)*nchoosek_double(p - 1 + d, d));
     if (complexity < complexityMin )
     {
@@ -1417,12 +1417,12 @@ int figtreeChooseParametersUniform( int d, double h, double epsilon,
 
 //------------------------------------------------------------------------------
 // Parameter selection scheme that does not assume uniform distribution.
-// In cases where sources are not uniformly distribution, this can lead to 
+// In cases where sources are not uniformly distribution, this can lead to
 // very large performance increases
 // because as the number of clusters increases, the max radius of any cluster
 // decreases MUCH faster than it would if the sources were uniformly distributed.
 // This function is based on ImprovedFastGaussTransformChooseParameters.cpp from
-// the IFGT source code, by Vikas C. Raykar.  
+// the IFGT source code, by Vikas C. Raykar.
 //
 // Initially created by Vlad Morariu on 2007-01-24.
 // Modified by Vlad Morariu on 2007-06-20.
@@ -1433,11 +1433,11 @@ int figtreeChooseParametersUniform( int d, double h, double epsilon,
 //     if there isn't a center at each source pt to give rx=0, an excessively
 //     large pMax is needed, and it is faster to just have a center at each pt.
 // Modified by Vlad Morariu on 2008-06-04 - change the way bound is computed to
-//     be more precise     
+//     be more precise
 // Modified by Vlad Morariu on 2008-12-05 - began changing function to incorporate
 //     memory limit for coefficient storage... not done yet
 //------------------------------------------------------------------------------
-int figtreeChooseParametersNonUniform( int d, int N, double * x, 
+int figtreeChooseParametersNonUniform( int d, int N, double * x,
                                     double h, double epsilon, int kLimit, double maxRange,
                                     int * K, int * pMax, double * r, double * errorBound )
 {
@@ -1466,9 +1466,9 @@ int figtreeChooseParametersNonUniform( int d, int N, double * x,
 
   int numClusters;
   double rx;
-  
+
   // Vlad 01/24/07 - add first cluster and get rx
-  kcc->ClusterIncrement( &numClusters, &rx ); 
+  kcc->ClusterIncrement( &numClusters, &rx );
 
   // evaluate complexity for increasing values of K
   for(int i = 0; i < kLimit; i++)
@@ -1485,8 +1485,8 @@ int figtreeChooseParametersNonUniform( int d, int N, double * x,
       double b = MIN(((rx + sqrt((rxSquare) + (2*p*hSquare)))/2), rx + rTemp);
       double c = rx - b;
       temp = temp*(((2*rx*b)/hSquare)/p);
-      error = temp*(exp(-(c*c)/hSquare));      
-    }*/  
+      error = temp*(exp(-(c*c)/hSquare));
+    }*/
     //double memTotalC = 8*(i+1);  // 8 is number of bytes, i+1 is K
     while((error > epsilon) && (p <= P_UPPER_LIMIT) ) //&& (memTotalC <= C_UPPER_LIMIT) )
     {
@@ -1506,25 +1506,25 @@ int figtreeChooseParametersNonUniform( int d, int N, double * x,
     {
       complexityMin = complexity;
       kTemp = i + 1;
-      pMaxTemp = p;  
+      pMaxTemp = p;
       errorTemp = error;
     }
-    
+
     // try to guess if we have gone past the minimum (the complexity function
     // zigzags as we increase number of clusters, but if it goes up enough,
     // we'll assume we've passed the global minimum).
-    // Also stop if truncation number is only 1 or if the max number of unique 
+    // Also stop if truncation number is only 1 or if the max number of unique
     // clusters are reached (rx = 0).
-    double nextComplexityEstimate = d*(i + 1) + d*log((double)i + 1) + ((1 + n)*nchoosek_double(p - 2 + d, d));   
+    double nextComplexityEstimate = d*(i + 1) + d*log((double)i + 1) + ((1 + n)*nchoosek_double(p - 2 + d, d));
     if( (p == 1) || (rx <= 0) || ( nextComplexityEstimate > 2*complexityMin || complexity > 2*complexityMin ) )
     {
-      break;    
+      break;
     }
 
     // add another cluster center, and get new max cluster radius
     kcc->ClusterIncrement( &numClusters, &rx );
     complexityLast = complexity;
-  }  
+  }
 
   // added this to catch case where desired error is never reached.
   // The best thing is to have as many clusters and terms in the taylor
@@ -1536,7 +1536,7 @@ int figtreeChooseParametersNonUniform( int d, int N, double * x,
 
   //printf("memLimit = %e, memTotalC = %e\n", (double)C_UPPER_LIMIT, kTemp*8*nchoosek_double(pMaxTemp-1+d,d));
 
-  // copy results 
+  // copy results
   if( K != NULL )
     *K = kTemp;
   if( pMax != NULL )
@@ -1559,7 +1559,7 @@ int figtreeChooseParametersNonUniform( int d, int N, double * x,
 // Created by Vlad Morariu 2007-06-19.
 //------------------------------------------------------------------------------
 int figtreeKCenterClustering( int d, int N, double * x, int kMax, int * K,
-                           double * rx, int * clusterIndex, double * clusterCenters, 
+                           double * rx, int * clusterIndex, double * clusterCenters,
                            int * numPoints, double * clusterRadii )
 {
   // check input arguments
@@ -1591,7 +1591,7 @@ int figtreeKCenterClustering( int d, int N, double * x, int kMax, int * K,
 //
 // Modified by Vlad Morariu on 2007-06-19.
 //------------------------------------------------------------------------------
-int figtreeEvaluateDirect( int d, int N, int M, double * x, double h, 
+int figtreeEvaluateDirect( int d, int N, int M, double * x, double h,
                         double * q, double * y, double * g )
 {
   // check input arguments
@@ -1626,14 +1626,14 @@ int figtreeEvaluateDirect( int d, int N, int M, double * x, double h,
 
 //------------------------------------------------------------------------------
 // This function approximates Gauss Transform.
-// Originally constructor, Evaluate(), and destructor from 
+// Originally constructor, Evaluate(), and destructor from
 // ImprovedFastGaussTransform.cpp (IFGT source code).
 //
 // Modified by Vlad Morariu on 2007-06-19.
 //------------------------------------------------------------------------------
-int figtreeEvaluateIfgt( int d, int N, int M, int W, double * x, 
-                           double h, double * q, double * y, 
-                           int pMax, int K, int * clusterIndex, 
+int figtreeEvaluateIfgt( int d, int N, int M, int W, double * x,
+                           double h, double * q, double * y,
+                           int pMax, int K, int * clusterIndex,
                            double * clusterCenter, double * clusterRadii,
                            double r, double epsilon, double * g )
 {
@@ -1668,12 +1668,12 @@ int figtreeEvaluateIfgt( int d, int N, int M, int W, double * x,
   {
     ry[i] = r + clusterRadii[i];
     rySquare[i] = ry[i]*ry[i];
-  }   
+  }
 
   //////////////////////////////////////////////////////////////////////////////
-  // Evaluate  
+  // Evaluate
   //////////////////////////////////////////////////////////////////////////////
-  computeC( d, N, W, K, pMaxTotal, pMax, h, clusterIndex, x, q, clusterCenter, C );  
+  computeC( d, N, W, K, pMaxTotal, pMax, h, clusterIndex, x, q, clusterCenter, C );
 
   for(int j = 0; j < M; j++)
   {
@@ -1682,7 +1682,7 @@ int figtreeEvaluateIfgt( int d, int N, int M, int W, double * x,
       g[M*w + j] = 0.0;
     }
 
-    int targetBase = j*d;        
+    int targetBase = j*d;
     for(int k = 0; k < K; k++)
     {
       int centerBase = k*d;
@@ -1699,12 +1699,12 @@ int figtreeEvaluateIfgt( int d, int N, int M, int W, double * x,
         computeTargetCenterMonomials( d, h, dy, pMax, targetCenterMonomials );
         double f=exp(-targetCenterDistanceSquare/hSquare);
         for(int w = 0; w < W; w++ )
-        {        
+        {
           for(int alpha = 0; alpha < pMaxTotal; alpha++)
           {
             g[M*w + j] += (C[(K*w + k)*pMaxTotal + alpha]*f*targetCenterMonomials[alpha]);
           }
-        }                      
+        }
       }
     }
   }
@@ -1724,21 +1724,21 @@ int figtreeEvaluateIfgt( int d, int N, int M, int W, double * x,
 
 //------------------------------------------------------------------------------
 // This function evaluates the IFGT by using a different for each source assuming
-//   the worst-case placement of any target and for each target assuming the 
+//   the worst-case placement of any target and for each target assuming the
 //   worst-case placement of any source.  Because the error bound is guaranteed
 //   to be satisfied for each source-target point pair, it is a point-wise adaptive
 //   version of the IFGT.
 //
-// See 'Automatic online tuning for fast Gaussian summation,' by Morariu et al, 
-//   NIPS 2008 for details.  
+// See 'Automatic online tuning for fast Gaussian summation,' by Morariu et al,
+//   NIPS 2008 for details.
 //
 // NOTES: Unlike the cluster-wise adaptive version, this does work for W>1.
 //
 // Created by Vlad Morariu on 2008-06-04.
 //------------------------------------------------------------------------------
-int figtreeEvaluateIfgtAdaptivePoint( int d, int N, int M, int W, double * x, 
-                                      double h, double * q, double * y, 
-                                      int pMax, int K, int * clusterIndex, 
+int figtreeEvaluateIfgtAdaptivePoint( int d, int N, int M, int W, double * x,
+                                      double h, double * q, double * y,
+                                      int pMax, int K, int * clusterIndex,
                                       double * clusterCenter, double * clusterRadii,
                                       double r, double epsilon,
                                       double * g )
@@ -1780,10 +1780,10 @@ int figtreeEvaluateIfgtAdaptivePoint( int d, int N, int M, int W, double * x,
     ry[i] = r + clusterRadii[i];
     rySquare[i] = ry[i]*ry[i];
     rx = MAX( rx, clusterRadii[i] );
-  } 
+  }
 
   //////////////////////////////////////////////////////////////////////////////
-  // Evaluate  
+  // Evaluate
   //////////////////////////////////////////////////////////////////////////////
   // for each cluster, compute max distances at which we can use a certain truncation number
   double * maxSourceDists2 = new double[pMax];
@@ -1799,7 +1799,7 @@ int figtreeEvaluateIfgtAdaptivePoint( int d, int N, int M, int W, double * x,
   //memset(pHistogram,0,sizeof(int)*pMax);
 
   memset( g, 0, sizeof(double)*M*W );
-    //int targetBase = j*d;        
+    //int targetBase = j*d;
   for(int k = 0; k < K; k++)
   {
     for(int j = 0; j < M; j++)
@@ -1821,13 +1821,13 @@ int figtreeEvaluateIfgtAdaptivePoint( int d, int N, int M, int W, double * x,
         computeTargetCenterMonomials( d, h, dy, p, targetCenterMonomials );
         double f=exp(-targetCenterDistanceSquare/hSquare);
         for(int w = 0; w < W; w++ )
-        {        
+        {
           double * C_offset = C + (K*w + k)*pMaxTotal;
           for(int alpha = 0; alpha < pTotal; alpha++)
           {
             g[M*w + j] += *(C_offset++)*f*targetCenterMonomials[alpha];
           }
-        }                      
+        }
       }
     }
   }
@@ -1857,27 +1857,27 @@ int figtreeEvaluateIfgtAdaptivePoint( int d, int N, int M, int W, double * x,
 // This function evaluates the IFGT by using a different truncation number for
 //   each cluster to ensure that the total error contribution from each
 //   cluster satisfies the error bound.  Thus, this is the cluster-wise adaptive
-//   version of the IFGT.  
-//   
-// See 'Automatic online tuning for fast Gaussian summation,' by Morariu et al, 
-//   NIPS 2008 for details.  
+//   version of the IFGT.
+//
+// See 'Automatic online tuning for fast Gaussian summation,' by Morariu et al,
+//   NIPS 2008 for details.
 //
 // NOTES: 1) Currently is not implemented to work for W>1.  For W>1, use the
 //           point-wise adaptive version instead.
 //
-//        2) The method could be extended to use different truncation numbers 
+//        2) The method could be extended to use different truncation numbers
 //           for each target by splitting targets into concentric regions and
 //           computing the cluster-wise truncation for each concentric region
-//           separately (because each region will have a different max distance 
-//           from the cluster center, the truncations will differ by region).  
-//           However, the current implementation uses only one region for the 
+//           separately (because each region will have a different max distance
+//           from the cluster center, the truncations will differ by region).
+//           However, the current implementation uses only one region for the
 //           targets, and varies the truncation by cluster for that region.
 //
 // Created by Vlad Morariu on 2008-06-04.
 //------------------------------------------------------------------------------
-int figtreeEvaluateIfgtAdaptiveCluster( int d, int N, int M, int W, double * x, 
-                                        double h, double * q, double * y, 
-                                        int pMax, int K, int * clusterIndex, 
+int figtreeEvaluateIfgtAdaptiveCluster( int d, int N, int M, int W, double * x,
+                                        double h, double * q, double * y,
+                                        int pMax, int K, int * clusterIndex,
                                         double * clusterCenter, double * clusterRadii,
                                         double r, double epsilon, int * clusterTruncations,
                                         double * g )
@@ -1919,16 +1919,16 @@ int figtreeEvaluateIfgtAdaptiveCluster( int d, int N, int M, int W, double * x,
     ry[i] = r + clusterRadii[i];
     rySquare[i] = ry[i]*ry[i];
     rx = MAX( rx, clusterRadii[i] );
-  } 
+  }
 
   //////////////////////////////////////////////////////////////////////////////
-  // Evaluate  
+  // Evaluate
   //////////////////////////////////////////////////////////////////////////////
   // for each cluster, compute max distances at which we can use a certain truncation number
   computeCAdaptiveCluster( d, N, W, K, pMaxTotal, pMax, h, clusterIndex, x, q, clusterCenter, clusterTruncations, pMaxTotals, C );
 
   memset( g, 0, sizeof(double)*M*W );
-    //int targetBase = j*d;        
+    //int targetBase = j*d;
   for(int k = 0; k < K; k++)
   {
     int p = clusterTruncations[k];
@@ -1949,13 +1949,13 @@ int figtreeEvaluateIfgtAdaptiveCluster( int d, int N, int M, int W, double * x,
         computeTargetCenterMonomials( d, h, dy, p, targetCenterMonomials );
         double f=exp(-targetCenterDistanceSquare/hSquare);
         for(int w = 0; w < W; w++ )
-        {        
+        {
           double * C_offset = C + (K*w + k)*pMaxTotal;
           for(int alpha = 0; alpha < pTotal; alpha++)
           {
             g[M*w + j] += *(C_offset++)*f*targetCenterMonomials[alpha];
           }
-        }                      
+        }
       }
     }
   }
@@ -1975,16 +1975,16 @@ int figtreeEvaluateIfgtAdaptiveCluster( int d, int N, int M, int W, double * x,
 }
 
 //------------------------------------------------------------------------------
-// This function approximates Gauss Transform using Approximate Nearest 
+// This function approximates Gauss Transform using Approximate Nearest
 // Neighbors.
-// Originally constructor, Evaluate(), and destructor from 
+// Originally constructor, Evaluate(), and destructor from
 // ImprovedFastGaussTransform.cpp of FIGTree code, by Vikas C. Raykar.
 //
 // Modified by Vlad Morariu on 2007-06-19.
 //------------------------------------------------------------------------------
-int figtreeEvaluateIfgtTree( int d, int N, int M, int W, double * x, 
-                              double h, double * q, double * y, 
-                              int pMax, int K, int * clusterIndex, 
+int figtreeEvaluateIfgtTree( int d, int N, int M, int W, double * x,
+                              double h, double * q, double * y,
+                              int pMax, int K, int * clusterIndex,
                               double * clusterCenter, double * clusterRadii,
                               double r, double epsilon, double * g )
 {
@@ -2015,7 +2015,7 @@ int figtreeEvaluateIfgtTree( int d, int N, int M, int W, double * x,
   int pMaxTotal = nchoosek(pMax-1+d,d);
   double * targetCenterMonomials = new double[pMaxTotal];
   double * dy = new double[d];
-  double * C = new double[W*K*pMaxTotal]; 
+  double * C = new double[W*K*pMaxTotal];
   double hSquare = h*h;
 
   //Find the maximum cluster radius
@@ -2029,11 +2029,11 @@ int figtreeEvaluateIfgtTree( int d, int N, int M, int W, double * x,
   }
   double rSquare=(r+pcr_max)*(r+pcr_max);
 
-  //Allocate storage using ANN procedures 
+  //Allocate storage using ANN procedures
   ANNpointArray dataPts = annAllocPts(K,d);     // allocate data points
   ANNidxArray   nnIdx   = new ANNidx[K];        // allocate near neigh indices
   ANNdistArray  dists = new ANNdist[K];         // allocate near neighbor dists
-  
+
   // Copy the cluster centers to the ANN data structure
   for (int k = 0; k < K; k++)
   {
@@ -2042,7 +2042,7 @@ int figtreeEvaluateIfgtTree( int d, int N, int M, int W, double * x,
   }
 
   // build search structure
-  ANNkd_tree * kdTree = new ANNkd_tree(              
+  ANNkd_tree * kdTree = new ANNkd_tree(
                                         dataPts,  // the data points
                                         K,        // number of points
                                         d,        // dimension of space
@@ -2052,7 +2052,7 @@ int figtreeEvaluateIfgtTree( int d, int N, int M, int W, double * x,
   ////////////////////////////////////////////////////////////////////
   // Evaluate
   ////////////////////////////////////////////////////////////////////
-  computeC( d, N, W, K, pMaxTotal, pMax, h, clusterIndex, x, q, clusterCenter, C );  
+  computeC( d, N, W, K, pMaxTotal, pMax, h, clusterIndex, x, q, clusterCenter, C );
 
   for(int j = 0; j < M; j++)
   {
@@ -2061,8 +2061,8 @@ int figtreeEvaluateIfgtTree( int d, int N, int M, int W, double * x,
       g[M*w+j]=0.0;
     }
 
-    int targetBase=j*d;        
-    
+    int targetBase=j*d;
+
     ANNpoint queryPt=&(y[targetBase]);
 
     int NN = kdTree->annkFRSearchUnordered(           // search
@@ -2087,11 +2087,11 @@ int figtreeEvaluateIfgtTree( int d, int N, int M, int W, double * x,
         computeTargetCenterMonomials( d, h, dy, pMax, targetCenterMonomials );
         double e = exp(-targetCenterDistanceSquare/hSquare);
         for(int w = 0; w < W; w++ )
-        {        
+        {
           for(int alpha = 0; alpha < pMaxTotal; alpha++)
           {
             g[M*w + j] += (C[(K*w+k)*pMaxTotal + alpha]*e*targetCenterMonomials[alpha]);
-          }    
+          }
         }
       }
     }
@@ -2105,10 +2105,10 @@ int figtreeEvaluateIfgtTree( int d, int N, int M, int W, double * x,
   delete [] C;
 
   annDeallocPts(dataPts);
-  delete [] nnIdx;              
+  delete [] nnIdx;
   delete [] dists;
   delete kdTree;
-  annClose();        
+  annClose();
 
   return 0;
 #endif
@@ -2116,11 +2116,11 @@ int figtreeEvaluateIfgtTree( int d, int N, int M, int W, double * x,
 
 //------------------------------------------------------------------------------
 // Gauss Transform computed using the ANN library.
-// Given a specified epsilon, the code computes the Gauss transform by summing 
-// the sources only within a certain radius--whose contribution is at least 
+// Given a specified epsilon, the code computes the Gauss transform by summing
+// the sources only within a certain radius--whose contribution is at least
 // epsilon. The neighbors are found using the ANN library.
 // http://www.cs.umd.edu/~mount/ANN/.
-// Originally constructor, Evaluate(), and destructor from GaussTransformTree.cpp 
+// Originally constructor, Evaluate(), and destructor from GaussTransformTree.cpp
 // of FIGTree code, by Vikas C. Raykar.
 //
 // Modified by Vlad Morariu on 2007-06-20
@@ -2128,7 +2128,7 @@ int figtreeEvaluateIfgtTree( int d, int N, int M, int W, double * x,
 //   nearest neighbors unordered (saves a significant amt of time), and with
 //   one call instead of two, as a result.
 //------------------------------------------------------------------------------
-int figtreeEvaluateDirectTree( int d, int N, int M, double * x, double h, 
+int figtreeEvaluateDirectTree( int d, int N, int M, double * x, double h,
                                double * q, double * y, double epsilon, double * g )
 {
 #ifdef FIGTREE_NO_ANN
@@ -2136,7 +2136,7 @@ int figtreeEvaluateDirectTree( int d, int N, int M, double * x, double h,
   printf("with compiler flag 'FIGTREE_NO_ANN' not set to enable ANN support.\n");
   return -1;
 #else
-  // check input arguments 
+  // check input arguments
   FIGTREE_CHECK_POS_NONZERO_INT( d, figtreeEvaluateDirectTreeUnordered );
   FIGTREE_CHECK_POS_NONZERO_INT( N, figtreeEvaluateDirectTreeUnordered );
   FIGTREE_CHECK_POS_NONZERO_INT( M, figtreeEvaluateDirectTreeUnordered );
@@ -2154,11 +2154,11 @@ int figtreeEvaluateDirectTree( int d, int N, int M, double * x, double h,
   double r = h*sqrt(log(1/epsilon));
   double rSquare=r*r;
 
-  // Allocate storage using ANN procedures 
+  // Allocate storage using ANN procedures
   ANNpointArray dataPts = annAllocPts(N,d);  // allocate data points
   ANNidxArray   nnIdx   = new ANNidx[N];     // allocate near neigh indices
   ANNdistArray  dists   = new ANNdist[N];    // allocate near neighbor dists
-  
+
   // Copy the source points to the ANN data structure
   for (int i = 0; i < N; i++)
   {
@@ -2167,7 +2167,7 @@ int figtreeEvaluateDirectTree( int d, int N, int M, double * x, double h,
   }
 
   // build search structure
-  ANNkd_tree * kdTree = new ANNkd_tree(              
+  ANNkd_tree * kdTree = new ANNkd_tree(
                                         dataPts, // the data points
                                         N,       // number of points
                                         d,       // dimension of space
@@ -2179,8 +2179,8 @@ int figtreeEvaluateDirectTree( int d, int N, int M, double * x, double h,
   ///////////////////////////////////////////////////////////////////////
   for(int j = 0; j < M; j++)
   {
-    g[j] = 0.0;  
-    int targetBase = j*d;          
+    g[j] = 0.0;
+    int targetBase = j*d;
     ANNpoint queryPt = &(y[targetBase]);
 
     int NN = kdTree->annkFRSearchUnordered( // fixed radius search
@@ -2202,10 +2202,10 @@ int figtreeEvaluateDirectTree( int d, int N, int M, double * x, double h,
   // Free memory
   //////////////////////////////////////////////////////////////////////////////
   annDeallocPts(dataPts);
-  delete [] nnIdx;              
+  delete [] nnIdx;
   delete [] dists;
   delete kdTree;
-  annClose();   
+  annClose();
 
   return 0;
 #endif
@@ -2214,23 +2214,23 @@ int figtreeEvaluateDirectTree( int d, int N, int M, double * x, double h,
 
 //------------------------------------------------------------------------------
 // This function evaluates the IFGT by using a different for each source assuming
-//   the worst-case placement of any target and for each target assuming the 
+//   the worst-case placement of any target and for each target assuming the
 //   worst-case placement of any source.  Because the error bound is guaranteed
 //   to be satisfied for each source-target point pair, it is a point-wise adaptive
 //   version of the IFGT.
 //
 // This function uses a tree for finding nearby cluster centers.
 //
-// See 'Automatic online tuning for fast Gaussian summation,' by Morariu et al, 
-//   NIPS 2008 for details.  
+// See 'Automatic online tuning for fast Gaussian summation,' by Morariu et al,
+//   NIPS 2008 for details.
 //
 // NOTES: Unlike the cluster-wise adaptive version, this does work for W>1.
 //
 // Created by Vlad Morariu on 2008-06-04.
 //------------------------------------------------------------------------------
-int figtreeEvaluateIfgtTreeAdaptivePoint( int d, int N, int M, int W, double * x, 
-                                      double h, double * q, double * y, 
-                                      int pMax, int K, int * clusterIndex, 
+int figtreeEvaluateIfgtTreeAdaptivePoint( int d, int N, int M, int W, double * x,
+                                      double h, double * q, double * y,
+                                      int pMax, int K, int * clusterIndex,
                                       double * clusterCenter, double * clusterRadii,
                                       double r, double epsilon,
                                       double * g )
@@ -2277,17 +2277,17 @@ int figtreeEvaluateIfgtTreeAdaptivePoint( int d, int N, int M, int W, double * x
     ry[i] = r + clusterRadii[i];
     rySquare[i] = ry[i]*ry[i];
     rx = MAX( rx, clusterRadii[i] );
-  } 
+  }
 
   //
   // Build tree on cluster centers
   //
   double rSquare = (r+rx)*(r+rx);
-  //Allocate storage using ANN procedures 
+  //Allocate storage using ANN procedures
   ANNpointArray dataPts = annAllocPts(K,d);     // allocate data points
   ANNidxArray   nnIdx   = new ANNidx[K];        // allocate near neigh indices
   ANNdistArray  dists = new ANNdist[K];         // allocate near neighbor dists
-  
+
   // Copy the cluster centers to the ANN data structure
   for (int k = 0; k < K; k++)
   {
@@ -2296,7 +2296,7 @@ int figtreeEvaluateIfgtTreeAdaptivePoint( int d, int N, int M, int W, double * x
   }
 
   // build search structure
-  ANNkd_tree * kdTree = new ANNkd_tree(              
+  ANNkd_tree * kdTree = new ANNkd_tree(
                                         dataPts,  // the data points
                                         K,        // number of points
                                         d,        // dimension of space
@@ -2305,7 +2305,7 @@ int figtreeEvaluateIfgtTreeAdaptivePoint( int d, int N, int M, int W, double * x
 
 
   //////////////////////////////////////////////////////////////////////////////
-  // Evaluate  
+  // Evaluate
   //////////////////////////////////////////////////////////////////////////////
   // for each cluster, compute max distances at which we can use a certain truncation number
   double * maxSourceDists2 = new double[pMax];
@@ -2352,13 +2352,13 @@ int figtreeEvaluateIfgtTreeAdaptivePoint( int d, int N, int M, int W, double * x
         computeTargetCenterMonomials( d, h, dy, p, targetCenterMonomials );
         double f=exp(-targetCenterDistanceSquare/hSquare);
         for(int w = 0; w < W; w++ )
-        {        
+        {
           double * C_offset = C + (K*w + k)*pMaxTotal;
           for(int alpha = 0; alpha < pTotal; alpha++)
           {
             g[M*w + j] += *(C_offset++)*f*targetCenterMonomials[alpha];
           }
-        }                      
+        }
       }
     }
   }
@@ -2382,10 +2382,10 @@ int figtreeEvaluateIfgtTreeAdaptivePoint( int d, int N, int M, int W, double * x
   delete [] pMaxTotals;
 
   annDeallocPts(dataPts);
-  delete [] nnIdx;              
+  delete [] nnIdx;
   delete [] dists;
   delete kdTree;
-  annClose();   
+  annClose();
   return 0;
 #endif
 }
@@ -2394,29 +2394,29 @@ int figtreeEvaluateIfgtTreeAdaptivePoint( int d, int N, int M, int W, double * x
 // This function evaluates the IFGT by using a different truncation number for
 //   each cluster to ensure that the total error contribution from each
 //   cluster satisfies the error bound.  Thus, this is the cluster-wise adaptive
-//   version of the IFGT. 
+//   version of the IFGT.
 //
 // This function uses a tree for finding nearby cluster centers.
-//   
-// See 'Automatic online tuning for fast Gaussian summation,' by Morariu et al, 
-//   NIPS 2008 for details.  
+//
+// See 'Automatic online tuning for fast Gaussian summation,' by Morariu et al,
+//   NIPS 2008 for details.
 //
 // NOTES: 1) Currently is not implemented to work for W>1.  For W>1, use the
 //           point-wise adaptive version instead.
 //
-//        2) The method could be extended to use different truncation numbers 
+//        2) The method could be extended to use different truncation numbers
 //           for each target by splitting targets into concentric regions and
 //           computing the cluster-wise truncation for each concentric region
-//           separately (because each region will have a different max distance 
-//           from the cluster center, the truncations will differ by region).  
-//           However, the current implementation uses only one region for the 
+//           separately (because each region will have a different max distance
+//           from the cluster center, the truncations will differ by region).
+//           However, the current implementation uses only one region for the
 //           targets, and varies the truncation by cluster for that region.
 //
 // Created by Vlad Morariu on 2008-06-04.
 //------------------------------------------------------------------------------
-int figtreeEvaluateIfgtTreeAdaptiveCluster( int d, int N, int M, int W, double * x, 
-                                        double h, double * q, double * y, 
-                                        int pMax, int K, int * clusterIndex, 
+int figtreeEvaluateIfgtTreeAdaptiveCluster( int d, int N, int M, int W, double * x,
+                                        double h, double * q, double * y,
+                                        int pMax, int K, int * clusterIndex,
                                         double * clusterCenter, double * clusterRadii,
                                         double r, double epsilon, int * clusterTruncations,
                                         double * g )
@@ -2463,17 +2463,17 @@ int figtreeEvaluateIfgtTreeAdaptiveCluster( int d, int N, int M, int W, double *
     ry[i] = r + clusterRadii[i];
     rySquare[i] = ry[i]*ry[i];
     rx = MAX( rx, clusterRadii[i] );
-  } 
+  }
 
   //
   // Build tree on cluster centers
   //
   double rSquare = (r+rx)*(r+rx);
-  //Allocate storage using ANN procedures 
+  //Allocate storage using ANN procedures
   ANNpointArray dataPts = annAllocPts(K,d);     // allocate data points
   ANNidxArray   nnIdx   = new ANNidx[K];        // allocate near neigh indices
   ANNdistArray  dists = new ANNdist[K];         // allocate near neighbor dists
-  
+
   // Copy the cluster centers to the ANN data structure
   for (int k = 0; k < K; k++)
   {
@@ -2482,7 +2482,7 @@ int figtreeEvaluateIfgtTreeAdaptiveCluster( int d, int N, int M, int W, double *
   }
 
   // build search structure
-  ANNkd_tree * kdTree = new ANNkd_tree(              
+  ANNkd_tree * kdTree = new ANNkd_tree(
                                         dataPts,  // the data points
                                         K,        // number of points
                                         d,        // dimension of space
@@ -2490,13 +2490,13 @@ int figtreeEvaluateIfgtTreeAdaptiveCluster( int d, int N, int M, int W, double *
                                         ANN_KD_SUGGEST);
 
   //////////////////////////////////////////////////////////////////////////////
-  // Evaluate  
+  // Evaluate
   //////////////////////////////////////////////////////////////////////////////
   // for each cluster, compute max distances at which we can use a certain truncation number
   computeCAdaptiveCluster( d, N, W, K, pMaxTotal, pMax, h, clusterIndex, x, q, clusterCenter, clusterTruncations, pMaxTotals, C );
 
   memset( g, 0, sizeof(double)*M*W );
-  
+
   for(int j = 0; j < M; j++)
   {
     int targetBase = j*d;
@@ -2526,13 +2526,13 @@ int figtreeEvaluateIfgtTreeAdaptiveCluster( int d, int N, int M, int W, double *
         computeTargetCenterMonomials( d, h, dy, p, targetCenterMonomials );
         double f=exp(-targetCenterDistanceSquare/hSquare);
         for(int w = 0; w < W; w++ )
-        {        
+        {
           double * C_offset = C + (K*w + k)*pMaxTotal;
           for(int alpha = 0; alpha < pTotal; alpha++)
           {
             g[M*w + j] += *(C_offset++)*f*targetCenterMonomials[alpha];
           }
-        }                      
+        }
       }
     }
   }
@@ -2548,10 +2548,10 @@ int figtreeEvaluateIfgtTreeAdaptiveCluster( int d, int N, int M, int W, double *
   delete [] pMaxTotals;
 
   annDeallocPts(dataPts);
-  delete [] nnIdx;              
+  delete [] nnIdx;
   delete [] dists;
   delete kdTree;
-  annClose();  
+  annClose();
   return 0;
 #endif
 }
@@ -2565,8 +2565,8 @@ int figtreeCalcMinMax( int d, int n, double * x, double * mins, double * maxs, i
   FIGTREE_CHECK_NONNULL_PTR( mins, figtreeCalcMinMax );
   FIGTREE_CHECK_NONNULL_PTR( maxs, figtreeCalcMinMax );
 
-  // use first sample values as current min and max if we're not updating 
-  //   some previously computed min and max values.  
+  // use first sample values as current min and max if we're not updating
+  //   some previously computed min and max values.
   if( update != 1 && n > 0 )
   {
     for( int i = 0; i < d; i++ )
@@ -2610,15 +2610,15 @@ int figtreeCalcMaxRange( double d, double * mins, double * maxs, double * maxRan
 //  Methods for automatic selection of evaluation method.
 //  Functions created by Vlad Morariu 05-02-2008.
 //  Functions modified by Vlad Morariu 06-06-2008.
-//  Functions modified by Vlad Morariu 11-02-2008.  
-//    - Added code to perform sub-sampling w/o replacement, and cleaned up code a 
+//  Functions modified by Vlad Morariu 11-02-2008.
+//    - Added code to perform sub-sampling w/o replacement, and cleaned up code a
 //      little for release.
 //
 ///////////////////////////////////////////////////////////////////////////////////
 
 //------------------------------------------------------------------------------
 // The functions below are used to estimate avg number of neighbors in the source set
-//   given a query point from the target set.  
+//   given a query point from the target set.
 //
 // Created by Vlad Morariu 2008-06-04.
 //------------------------------------------------------------------------------
@@ -2657,7 +2657,7 @@ inline void figtreeEstimatedNeighborSources( int d, int M, double * y, double h,
   double r = h*sqrt(log(1/epsilon));
 
   // estimate avg number of neighbors
-  figtreeGetAverageNumNeighbors( sourcesKdTree, d, M, y, r, Msample, avgNbrSources, avgAnnFlopsSources ); 
+  figtreeGetAverageNumNeighbors( sourcesKdTree, d, M, y, r, Msample, avgNbrSources, avgAnnFlopsSources );
 }
 
 inline void figtreeEstimatedNeighborClusters( int d, int M, double * y, int K, double * clusterRadii, double r, ANNkd_tree * clustersKdTree, int Msample, double * avgNbrClusters, double * avgAnnFlopsClusters )
@@ -2674,10 +2674,10 @@ inline void figtreeEstimatedNeighborClusters( int d, int M, double * y, int K, d
   double rMax =(r+pcrMax);
 
   // estimate numbers of pts with more than 1 neighbor and avg number of neighbors
-  figtreeGetAverageNumNeighbors( clustersKdTree, d, M, y, rMax, Msample, avgNbrClusters, avgAnnFlopsClusters ); 
+  figtreeGetAverageNumNeighbors( clustersKdTree, d, M, y, rMax, Msample, avgNbrClusters, avgAnnFlopsClusters );
 }
 #endif
-inline void figtreeEstimatedNeighborClustersNoAnn( int d, int N, int M, double h, double * y, 
+inline void figtreeEstimatedNeighborClustersNoAnn( int d, int N, int M, double h, double * y,
                                                    int K, double * clusterCenter, double * clusterRadii, double r, int Msample,
                                                    double * avgNbrClustersNoAnn, double * avgFindCentersFlops )
 {
@@ -2691,11 +2691,11 @@ inline void figtreeEstimatedNeighborClustersNoAnn( int d, int N, int M, double h
   {
     ry[i] = r + clusterRadii[i];
     rySquare[i] = ry[i]*ry[i];
-  }   
+  }
 
   for(int j = 0; j < Msample; j++)
   {
-    int targetBase = (rand()%M)*d;        
+    int targetBase = (rand()%M)*d;
     for(int k = 0; k < K; k++)
     {
       int centerBase = k*d;
@@ -2724,14 +2724,14 @@ inline void figtreeEstimatedNeighborClustersNoAnn( int d, int N, int M, double h
 
 //------------------------------------------------------------------------------
 //
-// The functions below estimate the number of floating point operations (flops) 
+// The functions below estimate the number of floating point operations (flops)
 //   for different parts of the figtree code.
-// Where possible the estimates are made directly by counting the number of 
+// Where possible the estimates are made directly by counting the number of
 //   floating point operations in the code itself, but for things such as
 //   building the kd-Tree and clustering, we use the theoretical complexity.
 //
 // Created by Vlad Morariu 2008-05-03 to 2008-06-04.
-// Modified by Vlad Morariu 2008-12-05 
+// Modified by Vlad Morariu 2008-12-05
 //   Changed floating op estimation functions to reflect revised versions of code.
 //------------------------------------------------------------------------------
 inline double figtreeEstimatedFlopsComputeSourceCenterMonomials( int d, int pMaxTotal )
@@ -2819,7 +2819,7 @@ int figtreeChooseEvaluationMethod( int d, int N, int M, int W, double * x, doubl
   // and setting k limit.
   //
   // In future releases of the code, users should be able to choose these parameters as they affect the
-  // quality of method selection.  For now, users will have to recompileif they want to change these 
+  // quality of method selection.  For now, users will have to recompileif they want to change these
   // parameters.
   //
   int Msample = M_SAMPLE; // how many of the target points do we sample to estimate avg number of neighbors and flops?
@@ -2858,7 +2858,7 @@ int figtreeChooseEvaluationMethod( int d, int N, int M, int W, double * x, doubl
     shuffled_indexes[i] = i;
   std::random_shuffle( shuffled_indexes, shuffled_indexes+N );  // could also use random_sample, if available
 
-  // Allocate storage using ANN procedures 
+  // Allocate storage using ANN procedures
   data.annSources = annAllocPts(Nss,d);  // allocate data points
 
   // Copy the source points to the ANN data structure
@@ -2871,7 +2871,7 @@ int figtreeChooseEvaluationMethod( int d, int N, int M, int W, double * x, doubl
   delete [] shuffled_indexes;
 
   // Build search structure
-  data.annSourcesKdTree = new ANNkd_tree(              
+  data.annSourcesKdTree = new ANNkd_tree(
                                         data.annSources, // the data points
                                         Nss,             // number of points
                                         d,               // dimension of space
@@ -2905,21 +2905,21 @@ int figtreeChooseEvaluationMethod( int d, int N, int M, int W, double * x, doubl
       ret = figtreeChooseParametersUniform( d, h, epsilon, kLimit, maxRange, &kMax, &data.pMax, &data.r, NULL );
     if( ret < 0 )
     {
-      printf("figtree: figtreeChooseParameters%sUniform() failed.\n", 
+      printf("figtree: figtreeChooseParameters%sUniform() failed.\n",
              ((ifgtParamMethod == FIGTREE_PARAM_NON_UNIFORM) ? "Non" : ""));
       return ret;
     }
 
-    verbose && printf("figtreeChooseParameters%sUniform() chose p=%i, k=%i.\n", 
+    verbose && printf("figtreeChooseParameters%sUniform() chose p=%i, k=%i.\n",
                       ((ifgtParamMethod == FIGTREE_PARAM_NON_UNIFORM) ? "Non" : ""), data.pMax, kMax );
 
     // do k-center clustering
     data.clusterIndex = new int[N];
-    data.numPoints    = new int[kMax]; 
+    data.numPoints    = new int[kMax];
     data.clusterCenters = new double[d*kMax];
     data.clusterRadii = new double[kMax];
 
-    ret = figtreeKCenterClustering( d, N, x, kMax, &data.K, &data.rx, data.clusterIndex, 
+    ret = figtreeKCenterClustering( d, N, x, kMax, &data.K, &data.rx, data.clusterIndex,
                                  data.clusterCenters, data.numPoints, data.clusterRadii );
     if( ret >= 0 )
     {
@@ -2929,7 +2929,7 @@ int figtreeChooseEvaluationMethod( int d, int N, int M, int W, double * x, doubl
       if( ret >= 0 )
       {
         // these are the params we would evaluate IFGT with
-        verbose && printf( "Eval IFGT(h= %3.2e, pMax= %i, K= %i, r= %3.2e, rx= %3.2e, epsilon= %3.2e, bound = %3.2e)\n", 
+        verbose && printf( "Eval IFGT(h= %3.2e, pMax= %i, K= %i, r= %3.2e, rx= %3.2e, epsilon= %3.2e, bound = %3.2e)\n",
                            h, data.pMax, data.K, data.r, data.rx, epsilon, errorBound);
 
         double pMaxTotalDouble = nchoosek_double(data.pMax-1+d,d);
@@ -2944,11 +2944,11 @@ int figtreeChooseEvaluationMethod( int d, int N, int M, int W, double * x, doubl
           flopsIfgt = figtreeEstimatedFlopsIfgt( d, N, M, W, data.K, data.pMaxTotal, avgNbrClustersNoAnn, avgFindCentersFlops, flopsExp );
 
 #ifndef FIGTREE_NO_ANN
-          // 
+          //
           // Estimate number of flops for performing IFGT with kd-Tree
           //
 
-          // Allocate storage using ANN procedures 
+          // Allocate storage using ANN procedures
           data.annClusters = annAllocPts(data.K,d);  // allocate data points
 
           // Copy the source points to the ANN data structure
@@ -2959,14 +2959,14 @@ int figtreeChooseEvaluationMethod( int d, int N, int M, int W, double * x, doubl
           }
 
           // build search structure
-          data.annClustersKdTree = new ANNkd_tree(              
+          data.annClustersKdTree = new ANNkd_tree(
                                                 data.annClusters, // the data points
                                                 data.K,           // number of points
                                                 d,                // dimension of space
                                                 1,
                                                 ANN_KD_SUGGEST );
-        
-          figtreeEstimatedNeighborClusters( d, M, y, data.K, data.clusterRadii, data.r, data.annClustersKdTree, Msample, &avgNbrClusters, &avgAnnFlopsClusters );     
+
+          figtreeEstimatedNeighborClusters( d, M, y, data.K, data.clusterRadii, data.r, data.annClustersKdTree, Msample, &avgNbrClusters, &avgAnnFlopsClusters );
           flopsIfgtTree    = figtreeEstimatedFlopsIfgtTree( d, N, M, W, data.K, data.pMaxTotal, avgNbrClusters, avgAnnFlopsClusters, flopsExp );
 #endif
         }
@@ -3016,7 +3016,7 @@ int figtreeChooseEvaluationMethod( int d, int N, int M, int W, double * x, doubl
   {
     double bestFlops = flopsDirect;
     *bestMethod = FIGTREE_EVAL_DIRECT;
-    
+
     if( flopsDirectTree != -1 && flopsDirectTree < bestFlops )
     {
       *bestMethod = FIGTREE_EVAL_DIRECT_TREE;
