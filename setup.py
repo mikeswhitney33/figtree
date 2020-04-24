@@ -3,16 +3,6 @@ from distutils.extension import Extension
 import os
 
 
-PY_DIR, _ = os.path.split(os.path.realpath(__file__))
-FIG_PATH, _ = os.path.split(PY_DIR)
-
-INCLUDE_PATH = os.path.join(FIG_PATH, "include")
-ANN_PATH = os.path.join(FIG_PATH, "external", "ann_1.1.1")
-ANN_INCLUDE_PATH = os.path.join(ANN_PATH, "include")
-ANN_SRC_PATH = os.path.join(ANN_PATH, "src")
-SRC_PATH = os.path.join(FIG_PATH, "src")
-
-
 __version_str__ = "1.0.0"
 
 
@@ -32,11 +22,16 @@ def extensions():
     import numpy
     from Cython.Build import cythonize
 
-    fig_sources = [os.path.join(SRC_PATH, f) for f in os.listdir(SRC_PATH) if f[-4:] == ".cpp"]
-    ann_sources = [os.path.join(ANN_SRC_PATH, f) for f in os.listdir(ANN_SRC_PATH) if f[-4:] == ".cpp"]
+    fig_path, _ = os.path.split(os.path.realpath(__file__))
+    fig_src_path = os.path.join(fig_path, "src")
+    fig_include_path = os.path.join(fig_path, "include")
 
-    print(fig_sources)
-    print(ann_sources)
+    ann_path = os.path.join(fig_path, "external", "ann_1.1.1")
+    ann_src_path = os.path.join(ann_path, "src")
+    ann_include_path = os.path.join(ann_path, "include")
+
+    fig_sources = [os.path.join(fig_src_path, f) for f in os.listdir(fig_src_path) if f[-4:] == ".cpp"]
+    ann_sources = [os.path.join(ann_src_path, f) for f in os.listdir(ann_src_path) if f[-4:] == ".cpp"]
 
     numpy_include_dir = numpy.get_include()
     figtree_module = Extension(
@@ -48,12 +43,11 @@ def extensions():
         ],
         language="c++",
         include_dirs=[
-            ANN_SRC_PATH,
-            ANN_INCLUDE_PATH,
-            INCLUDE_PATH,
+            ann_src_path,
+            ann_include_path,
+            fig_include_path,
             numpy_include_dir],
     )
-    print(figtree_module.sources)
     return cythonize([figtree_module])
 
 setup(
