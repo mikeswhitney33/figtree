@@ -57,6 +57,4 @@ setup(
     author="Vlad Morariu",
     url="https://github.com/mikeswhitney33/figtree",
     ext_modules=lazy_cythonize(extensions),
-    requires=['numpy','Cython'],
-    setup_requires=['numpy', 'Cython']
-)
+    requires=['numpy','Cython'])
