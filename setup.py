@@ -47,8 +47,9 @@ def extensions():
             ann_include_path,
             fig_include_path,
             numpy_include_dir],
+
     )
-    return cythonize([figtree_module])
+    return cythonize([figtree_module], language_level=3)
 
 setup(
     name="Figtree",
